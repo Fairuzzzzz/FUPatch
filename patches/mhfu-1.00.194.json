@@ -1,0 +1,342 @@
+{
+  "schema": 1,
+  "id": "mhfu-ios-1.00.194",
+  "title": "MHFU iOS — safe area, analog, loading/peta, bingkai coating",
+  "app": {
+    "bundle_id": "jp.co.capcom.mhp2gwd",
+    "executable": "MH Unite"
+  },
+  "slice": {
+    "arch": "arm64",
+    "vaddr_base": "0x100000000",
+    "source_sha256": [
+      "cfd125beb07d3cd8bd39775e9cd872dbabbaa4793982543c53c209e5988eb39a"
+    ],
+    "intermediate_sha256": [
+      "0a1f4b4860980505f022b611349699d86868ebd177f217ca4c71fdf117e02285"
+    ],
+    "result_sha256": "25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4"
+  },
+  "features": [
+    {
+      "id": "ui-scale",
+      "title": "Skala UI & konstanta render"
+    },
+    {
+      "id": "safe-area",
+      "title": "Safe area, HUD kanan, tombol submit"
+    },
+    {
+      "id": "analog",
+      "title": "Rect & radius analog"
+    },
+    {
+      "id": "loading",
+      "title": "Teks/latar loading & peta"
+    },
+    {
+      "id": "coating",
+      "title": "Bingkai coating sejajar bar (A/B)"
+    },
+    {
+      "id": "core",
+      "title": "Inti patch (konstanta & helper)"
+    }
+  ],
+  "binary_steps": [
+    {
+      "id": "safe-area.01",
+      "feature": "safe-area",
+      "vaddr": "0x100000c1d",
+      "expect": "0408",
+      "replace": "000d"
+    },
+    {
+      "id": "safe-area.02",
+      "feature": "safe-area",
+      "vaddr": "0x1001f56d1",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "safe-area.03",
+      "feature": "safe-area",
+      "vaddr": "0x100208abd",
+      "expect": "4a",
+      "replace": "56"
+    },
+    {
+      "id": "safe-area.04",
+      "feature": "safe-area",
+      "vaddr": "0x100208d31",
+      "expect": "480a8b4a8108910a010acb4afd42d34a01020b4a7d10",
+      "replace": "540a8b4a8108910a010acb4afd42d34a01020b4a7d13"
+    },
+    {
+      "id": "safe-area.05",
+      "feature": "safe-area",
+      "vaddr": "0x100208e1d",
+      "expect": "48088b08810891280008cb08fd42d31f4140",
+      "replace": "54088b08810891280008cb08fd42d31f0142"
+    },
+    {
+      "id": "safe-area.06",
+      "feature": "safe-area",
+      "vaddr": "0x10021938d",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "safe-area.07",
+      "feature": "safe-area",
+      "vaddr": "0x10021944d",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "safe-area.08",
+      "feature": "safe-area",
+      "vaddr": "0x10021950d",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "safe-area.09",
+      "feature": "safe-area",
+      "vaddr": "0x1002195cd",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "ui-scale.10",
+      "feature": "ui-scale",
+      "vaddr": "0x1003531b0",
+      "expect": "73000034",
+      "replace": "03000014"
+    },
+    {
+      "id": "ui-scale.11",
+      "feature": "ui-scale",
+      "vaddr": "0x1003581c4",
+      "expect": "2218221e02d016bd01102e1e4020211eab000054",
+      "replace": "1f2003d502d016bd01102e1e4020211e05000014"
+    },
+    {
+      "id": "ui-scale.12",
+      "feature": "ui-scale",
+      "vaddr": "0x10035f534",
+      "expect": "e81900b000ad40f9c81900d01f2003d501a544f953dd0494c81900d01f2003d5011546f9020080524edd0494",
+      "replace": "1f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d5"
+    },
+    {
+      "id": "ui-scale.13",
+      "feature": "ui-scale",
+      "vaddr": "0x10035f5d0",
+      "expect": "e81900b000ad40f9c81900d01f2003d501a544f92cdd0494c81900d01f2003d5011546f90200805227dd0494",
+      "replace": "1f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d5"
+    },
+    {
+      "id": "ui-scale.14",
+      "feature": "ui-scale",
+      "vaddr": "0x10035f7a8",
+      "expect": "e81900b000ad40f9c81900d01f2003d501a544f9b6dc0494c81900d01f2003d5011546f9e2030032b1dc0494",
+      "replace": "1f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d5"
+    },
+    {
+      "id": "ui-scale.15",
+      "feature": "ui-scale",
+      "vaddr": "0x10035f878",
+      "expect": "e81900b000ad40f9c81900d01f2003d501a544f982dc0494c81900d01f2003d5011546f9020080527ddc0494",
+      "replace": "1f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d51f2003d5"
+    },
+    {
+      "id": "ui-scale.16",
+      "feature": "ui-scale",
+      "vaddr": "0x100369584",
+      "expect": "a2e1039408102c1e2b09281eab0316bcbf4316b880420091a18302d19be10394a90315bcbf4315b880820091a1c302d196e103944c09281ebf0314b8ac4314bc80c20091a10303d190e10394ab33262d80020191a14303d18ce10394e9331a2d80420191e143039188e10394ffc300b9eac700bd80820191e103039183e10394eb2b162d80c20191e1c302917fe10394e92b142d80020291e18302917be103",
+      "replace": "ccd3049408102c1e2b09281eab0316bcbf4316b880420091a18302d1c5d30494a90315bcbf4315b880820091a1c302d1c0d304944c09281ebf0314b8ac4314bc80c20091a10303d1bad30494ab33262d80020191a14303d1b6d30494e9331a2d80420191e1430391b2d30494ffc300b9eac700bd80820191e1030391add30494eb2b162d80c20191e1c30291a9d30494e92b142d80020291e1830291a5d304"
+    },
+    {
+      "id": "safe-area.17",
+      "feature": "safe-area",
+      "vaddr": "0x10037d441",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "safe-area.18",
+      "feature": "safe-area",
+      "vaddr": "0x10037d501",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "safe-area.19",
+      "feature": "safe-area",
+      "vaddr": "0x10037d5c1",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "safe-area.20",
+      "feature": "safe-area",
+      "vaddr": "0x10037d681",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "coating.21",
+      "feature": "coating",
+      "vaddr": "0x100391ee8",
+      "expect": "e6abff97",
+      "replace": "79320494"
+    },
+    {
+      "id": "coating.22",
+      "feature": "coating",
+      "vaddr": "0x100391f28",
+      "expect": "d6abff97",
+      "replace": "6b320494"
+    },
+    {
+      "id": "coating.23",
+      "feature": "coating",
+      "vaddr": "0x100391f64",
+      "expect": "c7abff97",
+      "replace": "5e320494"
+    },
+    {
+      "id": "analog.24",
+      "feature": "analog",
+      "vaddr": "0x1003bd495",
+      "expect": "79407d",
+      "replace": "04024f"
+    },
+    {
+      "id": "analog.25",
+      "feature": "analog",
+      "vaddr": "0x1003bd520",
+      "expect": "0829281e",
+      "replace": "1f2003d5"
+    },
+    {
+      "id": "analog.26",
+      "feature": "analog",
+      "vaddr": "0x1003bd67c",
+      "expect": "e80f40b9",
+      "replace": "08008052"
+    },
+    {
+      "id": "analog.27",
+      "feature": "analog",
+      "vaddr": "0x1003bd754",
+      "expect": "e80f40b9",
+      "replace": "08008052"
+    },
+    {
+      "id": "safe-area.28",
+      "feature": "safe-area",
+      "vaddr": "0x1003e2a69",
+      "expect": "48",
+      "replace": "54"
+    },
+    {
+      "id": "loading.29",
+      "feature": "loading",
+      "vaddr": "0x100441b58",
+      "expect": "09",
+      "replace": "89"
+    },
+    {
+      "id": "loading.30",
+      "feature": "loading",
+      "vaddr": "0x1004420dc",
+      "expect": "13814079",
+      "replace": "51710114"
+    },
+    {
+      "id": "loading.31",
+      "feature": "loading",
+      "vaddr": "0x100442240",
+      "expect": "4932fd97",
+      "replace": "00710194"
+    },
+    {
+      "id": "loading.32",
+      "feature": "loading",
+      "vaddr": "0x100462a78",
+      "expect": "c81100d008f989b9746a28f8c81100d000a942f9c81100b01f2003d5017142f9ffcf0094e20300aaa80d00d0083540f9030140f9c81100901f2003d5",
+      "replace": "e00314aac8110090012944f94200805203d00094c81100d000a942f9c81100b0017142f9fecf0094e20300aaa80d00d0083540f9030140f9c8110090"
+    },
+    {
+      "id": "loading.33",
+      "feature": "loading",
+      "vaddr": "0x100462f14",
+      "expect": "e00313aae10315aadece00940309631e",
+      "replace": "0309631e2801781e6900781e68260e29"
+    },
+    {
+      "id": "safe-area.34",
+      "feature": "safe-area",
+      "vaddr": "0x10049e4b4",
+      "expect": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "replace": "c20b00d042e440f9420040f9406841bd416c41bda202001ca302001ca402001ca502001c4628231e0740201e0038261e0018271e8628251e2740201e2138261e2118271e260040bd270440bdc608201ee708211ec628221ee728241e060000bd070400bdc0035fd600000d4300000d430000000000007c420d0dc0798e050c0bce7d0213af050d0bef7d02134a01104b6b01114b0a0100790b0500790e0900790f0d00790a11c0790b15c0790c19c0790d1dc0798e050c0bce7d0213af050d0bef7d02134a01104b6b01114b0a1100790b1500790e1900790f1d00792200001468b200910a01c0790b05c0790c09c0790d0dc0798e050c0bce7d0213af050d0bef7d02138c7d0313ad7d03134a010c0b6b010d0b0a0100790b0500790e0900790f0d00790a11c0790b15c0790c19c0790d1dc0798e050c0bce7d0213af050d0bef7d02138c7d0313ad7d03134a010c0b6b010d0b0a1100790b1500790e1900790f1d0079bf8300d16614fc1713814079697e02537302090bad8efe1700000000000000000000000000000000681500b0029549bdc90980522301221e4208231e4900381e21c0298b029549bd090780522301221e4208231e4900381e4200090b3cc1fb97f38efe17"
+    },
+    {
+      "id": "coating.35",
+      "feature": "coating",
+      "vaddr": "0x10049e8cc",
+      "expect": "000000000000000000000000000000000000000000000000",
+      "replace": "216002516c79fb17216002516a79fb17216002516879fb17"
+    },
+    {
+      "id": "ui-scale.36",
+      "feature": "ui-scale",
+      "vaddr": "0x1005c7848",
+      "expect": "00002044",
+      "replace": "cdcccc3f"
+    }
+  ],
+  "members_remove": {
+    "exact": [
+      ".ZipComment",
+      "Payload/MH Unite.app/LaunchImage-568h@2x.png",
+      "Payload/MH Unite.app/LaunchImage-Landscape@2x~ipad.png",
+      "Payload/MH Unite.app/LaunchImage-Landscape~ipad.png",
+      "Payload/MH Unite.app/LaunchImage.png",
+      "Payload/MH Unite.app/LaunchImage@2x.png",
+      "Payload/MH Unite.app/_CodeSignature/",
+      "Payload/MH Unite.app/_CodeSignature/CodeResources",
+      "Payload/MH Unite.app/_CodeSignature/ResourceRules",
+      "iTunesArtwork",
+      "iTunesMetadata.plist"
+    ],
+    "globs": [
+      "Payload/*.app/LaunchImage*.png",
+      "Payload/*.app/_CodeSignature/*"
+    ]
+  },
+  "members_add": [
+    {
+      "name": "Payload/MH Unite.app/LaunchScreen.storyboard",
+      "source": "assets/LaunchScreen.storyboard"
+    }
+  ],
+  "info_changes": {
+    "set": {
+      "UILaunchStoryboardName": "LaunchScreen",
+      "NSBluetoothAlwaysUsageDescription": "MHFU uses Bluetooth to connect a wireless MFi game controller.",
+      "NSBluetoothPeripheralUsageDescription": "MHFU uses Bluetooth to connect a wireless MFi game controller.",
+      "UIDeviceFamily": [
+        1
+      ]
+    },
+    "remove": [
+      "UILaunchImageFile"
+    ]
+  },
+  "version": {
+    "default": "1.00.194",
+    "marker_key": "MHFUPatch"
+  }
+}

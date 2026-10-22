@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.ipa
+*.part
+.DS_Store
+
+# dependensi build UI (hasil build tetap di-commit di mhfu_patch/web)
+ui/node_modules/
+ui/.vite/
