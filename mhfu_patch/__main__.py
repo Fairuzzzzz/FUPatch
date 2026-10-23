@@ -90,9 +90,10 @@ def cmd_patch(args):
     if report.get('dry_run'):
         print('DRY RUN — no file written')
         if report['old_version'] == report['version']:
-        print('  version : %s (unchanged)' % report['version'])
-    else:
-        print('  version : %s -> %s' % (report['old_version'], report['version']))
+            print('  version : %s (unchanged)' % report['version'])
+        else:
+            print('  version : %s -> %s'
+                  % (report['old_version'], report['version']))
         print('  steps   : %d applied, %d skipped'
               % (len(report['applied']), len(report['skipped'])))
         print('  package : %d removed, %d added'
@@ -105,7 +106,8 @@ def cmd_patch(args):
     if report['old_version'] == report['version']:
         print('  version : %s (unchanged)' % report['version'])
     else:
-        print('  version : %s -> %s' % (report['old_version'], report['version']))
+        print('  version : %s -> %s'
+              % (report['old_version'], report['version']))
     print('  binary  : %s, slice sha %s'
           % (report['exe_kind_out'], report['slice_sha256']))
     print('  steps   : %d applied, %d skipped'
