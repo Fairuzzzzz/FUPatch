@@ -10,13 +10,13 @@ included for automation.
 
 ## What the patch changes
 
-| feature | example change |
-|---|---|
-| UI scale & render constants | 8 byte ranges |
-| Safe area, right HUD, submit button | 15 byte ranges |
-| Analog rect & radius | 4 byte ranges |
-| Loading text/background & map | 5 byte ranges |
-| Coating frame aligned with the bar (A/B) | 4 byte ranges |
+| feature                                  | example change |
+| ---------------------------------------- | -------------- |
+| UI scale & render constants              | 8 byte ranges  |
+| Safe area, right HUD, submit button      | 15 byte ranges |
+| Analog rect & radius                     | 4 byte ranges  |
+| Loading text/background & map            | 5 byte ranges  |
+| Coating frame aligned with the bar (A/B) | 4 byte ranges  |
 
 **36 ranges / 1,008 bytes** total in the `arm64` slice, plus package changes:
 
@@ -178,78 +178,14 @@ except `Info.plist`, identical executable sha256, identical plist keys.
 
 ## Troubleshooting
 
-| message | meaning |
-|---|---|
-| `IPA is still encrypted` | App Store IPA; a decrypted copy is required |
-| `unknown binary` | not a supported MHFU 1.00.11 IPA (or already modified elsewhere) |
-| `step … does not match` | binary bytes differ from the expected ones; send the full message |
-| `ZIP64 archives are not supported` | the IPA was packed as ZIP64; extract and re-zip without ZIP64 |
-| `not enough disk space` | free about 1.7 GB in the target folder (CLI) |
-| `XML Info.plist is not supported` | the browser engine expects the original binary Info.plist |
-
-### Rebuilding the UI
-
-The UI source lives in `ui/` (Vite + React + TypeScript + Tailwind + shadcn/ui
-components). The build output is committed to `mhfu_patch/web`, so users do not
-need Node.js.
-
-```bash
-cd ui && npm install && npm run build
-```
-
-Adding another shadcn component:
-
-```bash
-cd ui && npx shadcn@latest add dialog
-```
-
-## Development
-
-```bash
-# once: server dependencies
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-
-# fast tests (no large files)
-.venv/bin/python -m unittest discover -s tests -v
-
-# full end-to-end test (needs the original IPA + golden build)
-MHFU_E2E=1 .venv/bin/python -m unittest tests.test_cli_e2e -v
-
-# regenerate the manifest from a binary pair
-python3 tools/make_manifest.py \
-  --original-ipa "original.ipa" \
-  --final-bin ../re_mhfu/final-arm64 \
-  --intermediate-bin ../re_mhfu/intermediate-arm64 \
-  --patched-ipa ../reference-patched.ipa \
-  --out patches/mhfu-ios.json
-```
-
-Layout:
-
-```
-ui/                UI source (Vite + React + shadcn/ui)
-  src/lib/         browser patch engine (TS)
-mhfu_patch/
-  web/             built UI (static HTML/JS/CSS)
-  macho.py         fat/thin, arm64 slice, cryptid
-  manifest.py      load + validate patch sets, match shas
-  engine.py        inspection, binary steps, write + verification
-  package.py       remove/add members, Info.plist
-  ziprewrite.py    rewrite the IPA (streaming, atomic)
-  jobs.py          background jobs + SSE events (HTTP API)
-  server.py        FastAPI: static UI + optional HTTP API
-patches/           patch manifests (one file per build)
-assets/            LaunchScreen.storyboard fixture
-tools/             manifest generator, parity harness, IPA comparator
-tests/             unit + e2e
-requirements.txt   server dependencies (FastAPI + uvicorn)
-run.sh             sets up .venv and opens the UI
-```
-
-To add a new patch build, run `tools/make_manifest.py` with the new binary pair;
-`patches/index.json` selects the patch set automatically from the input IPA
-slice sha. The browser engine bundles `patches/mhfu-ios.json`, so rebuild the UI
-after changing it.
+| message                            | meaning                                                           |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| `IPA is still encrypted`           | App Store IPA; a decrypted copy is required                       |
+| `unknown binary`                   | not a supported MHFU 1.00.11 IPA (or already modified elsewhere)  |
+| `step … does not match`            | binary bytes differ from the expected ones; send the full message |
+| `ZIP64 archives are not supported` | the IPA was packed as ZIP64; extract and re-zip without ZIP64     |
+| `not enough disk space`            | free about 1.7 GB in the target folder (CLI)                      |
+| `XML Info.plist is not supported`  | the browser engine expects the original binary Info.plist         |
 
 ## Limitations
 
