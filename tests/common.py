@@ -1,4 +1,4 @@
-"""Utilitas bersama untuk tes."""
+"""Shared helpers for tests."""
 import os
 import plistlib
 import struct
@@ -41,14 +41,14 @@ def make_synthetic_ipa(dst, exe_bytes, version='1.00.11', app='MH Unite'):
                     plistlib.dumps(pl, fmt=plistlib.FMT_BINARY))
         zf.writestr('Payload/%s.app/%s' % (app, app), exe_bytes)
         zf.writestr('Payload/%s.app/data.bin' % app, b'harga' * 500)
-        zf.writestr('Payload/%s.app/LaunchImage.png' % app, b'png-lama')
+        zf.writestr('Payload/%s.app/LaunchImage.png' % app, b'old-png')
         zf.writestr('Payload/%s.app/_CodeSignature/CodeResources' % app, b'crc')
         zf.writestr('iTunesMetadata.plist', b'<plist/>')
     return dst
 
 
 def arm64_stub(size=8192):
-    """Mach-O arm64 minimal dengan sha yang tidak dikenal manifest."""
+    """Minimal arm64 Mach-O with a sha the manifest does not know."""
     head = struct.pack('<IIIIIIII', 0xFEEDFACF, 0x0100000C, 0, 2, 0, 0, 0, 0)
     return head + b'\0' * (size - len(head))
 

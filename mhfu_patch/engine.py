@@ -1,4 +1,4 @@
-"""Mesin patch: inspeksi IPA, terapkan langkah biner, tulis IPA baru."""
+"""Patch engine: inspect an IPA, apply binary steps, write a new IPA."""
 import hashlib
 import os
 import plistlib
@@ -55,7 +55,7 @@ def _info_member(names):
 
 
 def look(ipa_path, patch_set=None, directory=None):
-    """Inspeksi IPA tanpa mengubah apa pun."""
+    """Inspect an IPA without modifying anything."""
     ipa_path = os.path.abspath(ipa_path)
     if not os.path.isfile(ipa_path):
         raise PatchError('IPA not found: %s' % ipa_path)
@@ -164,7 +164,7 @@ def look(ipa_path, patch_set=None, directory=None):
 
 
 def suggest_version(info):
-    """Versi yang masuk akal untuk build berikutnya."""
+    """Reasonable version for the next build."""
     unchanged = (info['match'] == 'result'
                  or (not info['steps_pending'] and not info['remove_pending']
                      and not info['add_pending']))
@@ -180,7 +180,7 @@ def suggest_version(info):
 
 
 def suggest_output(ipa_path, version):
-    """Nama file hasil yang belum dipakai, di folder IPA sumber."""
+    """Output name that is still free, in the source IPA folder."""
     folder = os.path.dirname(os.path.abspath(ipa_path)) or '.'
     name = 'MHFU_patched_%s' % version
     candidate = os.path.join(folder, name + '.ipa')
@@ -192,7 +192,7 @@ def suggest_output(ipa_path, version):
 
 
 def apply_steps(slice_bytes, m, on_step=None):
-    """Terapkan langkah biner (3 arah: expect→tulis, replace→lewati, lain→gagal)."""
+    """Apply binary steps (3-way: expect→write, replace→skip, else→fail)."""
     base = int(m['slice']['vaddr_base'], 0)
     buf = bytearray(slice_bytes)
     applied, skipped = [], []
@@ -219,7 +219,7 @@ def apply_steps(slice_bytes, m, on_step=None):
 def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
           on_event=None, is_cancelled=None, directory=None, patch_set=None,
           force=False):
-    """Patch IPA dan tulis hasilnya. Mengembalikan laporan."""
+    """Patch the IPA and write the result. Returns a report."""
     started = time.monotonic()
     ipa_path = os.path.abspath(ipa_path)
     out_path = os.path.abspath(out_path)

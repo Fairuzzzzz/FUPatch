@@ -77,7 +77,7 @@ class PackageTest(unittest.TestCase):
             self.assertTrue(path)
 
     def test_missing_fixture(self):
-        spec = [{'name': 'Payload/X.app/bar.txt', 'source': 'assets/tidak-ada.txt'}]
+        spec = [{'name': 'Payload/X.app/bar.txt', 'source': 'assets/missing.txt'}]
         with self.assertRaises(package.PackageError):
             package.resolve_additions(spec, set(), '/tmp')
 

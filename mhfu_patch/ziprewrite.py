@@ -1,4 +1,4 @@
-"""Tulis ulang IPA: salin member apa adanya, ganti/hapus/tambah seperlunya."""
+"""Rewrite an IPA: copy members as-is, replace/remove/add as needed."""
 import os
 import struct
 import zlib
@@ -9,7 +9,7 @@ EOCD_SIG = b'PK\x05\x06'
 CD_FMT = '<IHHHHHHIIIHHHHHII'
 CD_SIZE = struct.calcsize(CD_FMT)
 
-# tanggal tetap supaya keluaran deterministik
+# fixed timestamp so the output is deterministic
 FIXED_DATE = ((2026 - 1980) << 9) | (10 << 5) | 22
 FIXED_TIME = 0
 
@@ -23,7 +23,7 @@ def _b(value):
 
 
 def read_index(path):
-    """Baca EOCD + central directory tanpa mengekstrak arsip."""
+    """Read the EOCD + central directory without extracting the archive."""
     with open(path, 'rb') as fh:
         size = os.fstat(fh.fileno()).st_size
         back = min(size, 66000)
@@ -81,11 +81,11 @@ def read_member(path, name):
 
 def rewrite(src, dst, replacements=None, removals=None, additions=None,
             progress=None, level=6):
-    """Tulis IPA baru.
+    """Write a new IPA.
 
-    replacements: {nama(bytes): isi baru(bytes)}
-    removals    : himpunan nama(bytes) yang dibuang
-    additions   : daftar (nama(bytes), isi(bytes)) yang ditambahkan
+    replacements: {name(bytes): new content(bytes)}
+    removals    : set of name(bytes) to drop
+    additions   : list of (name(bytes), content(bytes)) to add
     progress    : f(done, total, bytes_done, bytes_total)
     """
     replacements = {(_b(k)): v for k, v in (replacements or {}).items()}

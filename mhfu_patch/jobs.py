@@ -1,4 +1,4 @@
-"""Registry job latar belakang + antrean event untuk SSE."""
+"""Background job registry + event queue for SSE."""
 import threading
 import time
 import uuid

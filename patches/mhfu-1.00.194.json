@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "id": "mhfu-ios-1.00.194",
-  "title": "MHFU iOS — safe area, analog, loading/peta, bingkai coating",
+  "title": "MHFU iOS — safe area, analog, loading/map, coating frame",
   "app": {
     "bundle_id": "jp.co.capcom.mhp2gwd",
     "executable": "MH Unite"
@@ -20,27 +20,27 @@
   "features": [
     {
       "id": "ui-scale",
-      "title": "Skala UI & konstanta render"
+      "title": "UI scale & render constants"
     },
     {
       "id": "safe-area",
-      "title": "Safe area, HUD kanan, tombol submit"
+      "title": "Safe area, right HUD, submit button"
     },
     {
       "id": "analog",
-      "title": "Rect & radius analog"
+      "title": "Analog rect & radius"
     },
     {
       "id": "loading",
-      "title": "Teks/latar loading & peta"
+      "title": "Loading text/background & map"
     },
     {
       "id": "coating",
-      "title": "Bingkai coating sejajar bar (A/B)"
+      "title": "Coating frame aligned with the bar (A/B)"
     },
     {
       "id": "core",
-      "title": "Inti patch (konstanta & helper)"
+      "title": "Patch core (constants & helpers)"
     }
   ],
   "binary_steps": [

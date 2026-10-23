@@ -60,7 +60,7 @@ class ManifestTest(unittest.TestCase):
 
     def test_unknown_set(self):
         with self.assertRaises(manifest.ManifestError):
-            manifest.load_set('tidak-ada')
+            manifest.load_set('missing-set')
 
 
 if __name__ == '__main__':

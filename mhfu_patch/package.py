@@ -1,4 +1,4 @@
-"""Perubahan paket: hapus/tambah member, tulis ulang Info.plist."""
+"""Package changes: remove/add members, rewrite Info.plist."""
 import fnmatch
 import os
 import plistlib
@@ -9,7 +9,7 @@ class PackageError(ValueError):
 
 
 def resolve_removals(spec, names):
-    """Nama member yang harus dihapus menurut spec (exact + glob)."""
+    """Member names to remove according to the spec (exact + glob)."""
     spec = spec or {}
     exact = set(spec.get('exact', []))
     globs = spec.get('globs', [])
@@ -26,7 +26,7 @@ def resolve_removals(spec, names):
 
 
 def resolve_additions(spec, names, base_dir):
-    """Member yang harus ditambah, beserta isinya."""
+    """Members to add, together with their contents."""
     out = []
     for item in spec or []:
         name = item.get('name')

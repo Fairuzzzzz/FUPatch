@@ -23,7 +23,7 @@ def file_sha(path):
 @unittest.skipUnless(os.environ.get('MHFU_E2E') == '1',
                      'tes lambat: set MHFU_E2E=1')
 @unittest.skipUnless(have(ORIGINAL_IPA, PATCHED_IPA),
-                     'IPA asli / IPA acuan tidak tersedia')
+                     'original / reference IPA not available')
 class CliE2ETest(unittest.TestCase):
     def run_cli(self, *args):
         return subprocess.run([sys.executable, '-m', 'mhfu_patch', *args],

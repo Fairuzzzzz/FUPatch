@@ -33,9 +33,9 @@ class ZipRewriteTest(unittest.TestCase):
 
         res = ziprewrite.rewrite(
             self.src, self.dst,
-            replacements={'a.txt': b'ALPHA-BARU' * 50},
+            replacements={'a.txt': b'ALPHA-NEW' * 50},
             removals={'drop.txt', 'Payload/X.app/data.bin'},
-            additions=[('baru/hello.txt', 'halo dunia'.encode())],
+            additions=[('new/hello.txt', 'hello world'.encode())],
             progress=progress)
 
         self.assertEqual(res['members'], 3)
@@ -45,9 +45,9 @@ class ZipRewriteTest(unittest.TestCase):
         with zipfile.ZipFile(self.dst) as zf:
             self.assertIsNone(zf.testzip())
             names = set(zf.namelist())
-            self.assertEqual(names, {'a.txt', 'keep/b.bin', 'baru/hello.txt'})
-            self.assertEqual(zf.read('a.txt'), b'ALPHA-BARU' * 50)
-            self.assertEqual(zf.read('baru/hello.txt'), 'halo dunia'.encode())
+            self.assertEqual(names, {'a.txt', 'keep/b.bin', 'new/hello.txt'})
+            self.assertEqual(zf.read('a.txt'), b'ALPHA-NEW' * 50)
+            self.assertEqual(zf.read('new/hello.txt'), 'hello world'.encode())
 
         with zipfile.ZipFile(self.src) as zf:
             original_keep = zf.read('keep/b.bin')
@@ -80,12 +80,12 @@ class ZipRewriteTest(unittest.TestCase):
 
         with self.assertRaises(Stop):
             ziprewrite.rewrite(self.src, self.dst, progress=progress)
-        self.assertTrue(os.path.exists(self.dst))       # pemanggil yang menghapus
+        self.assertTrue(os.path.exists(self.dst))       # the caller removes it
 
     def test_read_member(self):
         self.assertEqual(ziprewrite.read_member(self.src, 'drop.txt'), b'buang aku')
         with self.assertRaises(ziprewrite.ZipError):
-            ziprewrite.read_member(self.src, 'tidak-ada')
+            ziprewrite.read_member(self.src, 'missing')
 
     def test_names(self):
         idx = ziprewrite.read_index(self.src)

@@ -59,7 +59,7 @@ def _thin_slice(data, offset, magic, cputype=None, cpusubtype=None):
             cryptoff = _u32le(data, off + 8)
             cryptid = _u32le(data, off + 16)
         off += size
-    blob = data[offset:offset + 0]  # placeholder, ukuran diisi pemanggil
+    blob = data[offset:offset + 0]  # placeholder; the caller fills in the size
     del blob
     return {
         'arch': arch_name(cpu, sub),
@@ -77,7 +77,7 @@ def analyze(data):
     """Describe a Mach-O blob.
 
     Returns {'kind': 'fat'|'thin', 'slices': [...], 'size': len(data)}.
-    Setiap slice: arch, cputype, cpusubtype, offset, size, cryptid, encrypted.
+    Each slice: arch, cputype, cpusubtype, offset, size, cryptid, encrypted.
     """
     if len(data) < 8:
         raise MachOError('file is too short')
@@ -129,7 +129,7 @@ def _analyze_fat(data, magic):
 
 
 def find_arm64(analysis):
-    """Slice arm64 (utamakan arm64 murni, lalu arm64e)."""
+    """arm64 slice (prefer plain arm64, then arm64e)."""
     best = None
     for sl in analysis['slices']:
         if sl['arch'] == 'arm64':

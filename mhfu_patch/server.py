@@ -23,7 +23,7 @@ WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 DEFAULT_WORKDIR = os.environ.get('FUPATCH_WORKSPACE') or os.path.join(
     os.path.expanduser('~'), '.cache', 'fupatch')
 MAX_UPLOAD = 4 << 30                 # 4 GB
-UPLOAD_TTL = 12 * 3600               # sisa upload yang telantar
+UPLOAD_TTL = 12 * 3600               # stale uploads
 MIME = {
     '.html': 'text/html; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
@@ -37,7 +37,7 @@ MIME = {
 
 
 def _sweep(root, keep=2):
-    """Buang job lama dan upload yang telantar supaya disk tidak penuh."""
+    """Drop old jobs and stale uploads so the disk does not fill up."""
     try:
         names = os.listdir(root)
     except OSError:

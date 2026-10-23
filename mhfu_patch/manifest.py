@@ -1,4 +1,4 @@
-"""Manifest patch: pemuatan, validasi, dan pencocokan sha slice."""
+"""Patch manifest: loading, validation, and slice sha matching."""
 import json
 import os
 
@@ -90,7 +90,7 @@ def classify(m, sha):
 
 
 def find_set_for_sha(sha, directory=None):
-    """Cari patch set yang mengenali sha slice tersebut."""
+    """Find the patch set that recognises this slice sha."""
     idx = load_index(directory)
     for item in idx.get('sets', []):
         try:

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Alat pengembang: buat manifest patch dari pasangan biner + IPA.
+"""Developer tool: build a patch manifest from a binary pair + IPA.
 
-Contoh:
+Example:
   python3 tools/make_manifest.py \
-      --original-ipa "IPA asli.ipa" \
+      --original-ipa "original.ipa" \
       --final-bin ../re_mhfu/mh_unite_c194 \
       --intermediate-bin ../re_mhfu/mh_unite_base186 \
       --patched-ipa ../MHFU_load194.ipa \
@@ -22,28 +22,28 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 FEATURES = [
-    ('ui-scale', 'Skala UI & konstanta render', [
+    ('ui-scale', 'UI scale & render constants', [
         0x1003531b0, 0x1003581c4, 0x10035f534, 0x10035f5d0, 0x10035f7a8,
         0x10035f878, 0x100369584, 0x1005c7848]),
-    ('safe-area', 'Safe area, HUD kanan, tombol submit', [
+    ('safe-area', 'Safe area, right HUD, submit button', [
         0x100000c1d, 0x1001f56d1, 0x100208abd, 0x100208d31, 0x100208e1d,
         0x10021938d, 0x10021944d, 0x10021950d, 0x1002195cd, 0x10037d441,
         0x10037d501, 0x10037d5c1, 0x10037d681, 0x1003e2a69, 0x10049e4b4]),
-    ('analog', 'Rect & radius analog', [
+    ('analog', 'Analog rect & radius', [
         0x1003bd495, 0x1003bd520, 0x1003bd67c, 0x1003bd754]),
-    ('loading', 'Teks/latar loading & peta', [
+    ('loading', 'Loading text/background & map', [
         0x100441b58, 0x1004420dc, 0x100442240, 0x100462a78, 0x100462f14]),
-    ('coating', 'Bingkai coating sejajar bar (A/B)', [
+    ('coating', 'Coating frame aligned with the bar (A/B)', [
         0x100391ee8, 0x100391f28, 0x100391f64, 0x10049e8cc]),
 ]
-CORE_TITLE = 'Inti patch (konstanta & helper)'
+CORE_TITLE = 'Patch core (constants & helpers)'
 BASE = 0x100000000
 GAP = 32
 
 
 def diff_ranges(old, new):
     if len(old) != len(new):
-        raise SystemExit('ukuran biner beda: %d vs %d' % (len(old), len(new)))
+        raise SystemExit('binary size mismatch: %d vs %d' % (len(old), len(new)))
     runs = []
     i, n = 0, len(old)
     while i < n:
@@ -92,12 +92,12 @@ def read_arm64(ipa_path):
                 info = (name.rsplit('/', 1)[0] + '/' + exe, pl, name)
                 break
         if not info:
-            raise SystemExit('Info.plist tidak ada di %s' % ipa_path)
+            raise SystemExit('Info.plist not found in %s' % ipa_path)
         data = zf.read(info[0])
     ma = macho.analyze(data)
     arm = macho.find_arm64(ma)
     if arm is None:
-        raise SystemExit('tidak ada slice arm64')
+        raise SystemExit('no arm64 slice found')
     return macho.extract(data, arm), info[1]
 
 
@@ -111,10 +111,10 @@ def main():
     ap.add_argument('--original-ipa', required=True)
     ap.add_argument('--final-bin', required=True)
     ap.add_argument('--intermediate-bin')
-    ap.add_argument('--patched-ipa', help='IPA hasil build teruji (untuk delta paket)')
+    ap.add_argument('--patched-ipa', help='tested build IPA (for the package delta)')
     ap.add_argument('--id', default='mhfu-ios-1.00.194')
-    ap.add_argument('--title', default='MHFU iOS — safe area, analog, loading/peta, '
-                                      'bingkai coating')
+    ap.add_argument('--title', default='MHFU iOS — safe area, analog, loading/map, '
+                                      'coating frame')
     ap.add_argument('--version', default='1.00.194')
     ap.add_argument('--out', default=os.path.join(ROOT, 'patches', 'mhfu-1.00.194.json'))
     args = ap.parse_args()
@@ -135,7 +135,7 @@ def main():
             'expect': old[start:end].hex(),
             'replace': new[start:end].hex(),
         })
-    print('langkah: %d rentang, %d byte' % (len(steps), sum(len(s['replace']) // 2
+    print('steps: %d ranges, %d bytes' % (len(steps), sum(len(s['replace']) // 2
                                                             for s in steps)))
 
     manifest = {
@@ -209,8 +209,8 @@ def main():
                      if k in p_old and p_old[k] != venum and k not in version_keys})
         removes = [k for k in p_old if k not in p_new]
         manifest['info_changes'] = {'set': sets, 'remove': removes}
-        print('info.plist: set %d kunci, hapus %d kunci' % (len(sets), len(removes)))
-        print('member: hapus %d, tambah %d' % (len(only_a), len(only_b)))
+        print('info.plist: set %d keys, remove %d keys' % (len(sets), len(removes)))
+        print('members: remove %d, add %d' % (len(only_a), len(only_b)))
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, 'w', encoding='utf-8') as fh:
@@ -222,8 +222,8 @@ def main():
             {'id': args.id, 'file': os.path.basename(args.out),
              'title': args.title}]}, fh, indent=2, ensure_ascii=False)
         fh.write('\n')
-    print('tulis: %s' % args.out)
-    print('tulis: %s' % index_path)
+    print('wrote: %s' % args.out)
+    print('wrote: %s' % index_path)
 
 
 if __name__ == '__main__':

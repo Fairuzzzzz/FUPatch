@@ -11,7 +11,7 @@ from mhfu_patch import engine, manifest
 BASE = 0x100000000
 
 
-@unittest.skipUnless(have(ORIG_BIN, FINAL), 'biner golden tidak tersedia')
+@unittest.skipUnless(have(ORIG_BIN, FINAL), 'golden binary not available')
 class BinaryStepsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -31,7 +31,7 @@ class BinaryStepsTest(unittest.TestCase):
         self.assertEqual(applied, [])
         self.assertEqual(len(skipped), 36)
 
-    @unittest.skipUnless(have(BASE186), 'biner 186 tidak tersedia')
+    @unittest.skipUnless(have(BASE186), '1.00.186 binary not available')
     def test_base186(self):
         data = open(BASE186, 'rb').read()
         out, applied, skipped = engine.apply_steps(data, self.m)
@@ -49,12 +49,12 @@ class BinaryStepsTest(unittest.TestCase):
             engine.apply_steps(bytes(bad), self.m)
 
     def test_result_sha_enforced(self):
-        """apply_steps sendiri tidak memverifikasi; engine.patch yang melakukannya."""
+        """apply_steps itself does not verify; engine.patch does."""
         out, _applied, _skipped = engine.apply_steps(self.orig, self.m)
         self.assertEqual(len(out), len(self.orig))
 
 
-@unittest.skipUnless(have(ORIG_BIN), 'biner golden tidak tersedia')
+@unittest.skipUnless(have(ORIG_BIN), 'golden binary not available')
 class LookAndPatchTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -98,7 +98,7 @@ class LookAndPatchTest(unittest.TestCase):
 
     def test_not_macho(self):
         ipa = make_synthetic_ipa(os.path.join(self.tmp.name, 'y.ipa'),
-                                 b'bukan biner')
+                                 b'not a binary')
         with self.assertRaises((engine.PatchError, ValueError)):
             engine.look(ipa)
 
