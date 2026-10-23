@@ -1,9 +1,8 @@
 # MHFU Patcher
 
 Turn the **original** Monster Hunter Freedom Unite IPA (iOS 1.00.11) into a
-build that **matches** the device-tested 1.00.194 patch build: safe area/HUD,
-analog, loading text & background, map position, coating frame aligned with the
-bar, and MFi controller support.
+patched build with: safe area/HUD, analog, loading text & background, map
+position, coating frame aligned with the bar, and MFi controller support.
 
 Everything runs on your own machine. The IPA is uploaded to a local server
 (`127.0.0.1`), never to the internet.
@@ -68,9 +67,12 @@ modified.
 # inspect only
 python3 -m mhfu_patch inspect --ipa original.ipa
 
-# patch
-python3 -m mhfu_patch patch --ipa original.ipa \
-    --out MHFU_patched_1.00.194.ipa --version 1.00.194
+# patch (keeps the source app version)
+python3 -m mhfu_patch patch --ipa original.ipa --out MHFU_patched.ipa
+
+# optional: give a test build its own version
+python3 -m mhfu_patch patch --ipa original.ipa --out MHFU_patched.ipa \
+    --version 1.00.12
 
 # dry run, no file written
 python3 -m mhfu_patch patch --ipa original.ipa --out /tmp/x.ipa --dry-run
@@ -79,8 +81,12 @@ python3 -m mhfu_patch patch --ipa original.ipa --out /tmp/x.ipa --dry-run
 .venv/bin/python -m mhfu_patch serve --port 8765
 ```
 
-`patch` options: `--keep-fat` (keep the FAT binary), `--force` (overwrite the
+`patch` options: `--version` (override the app version; by default the source
+version is kept), `--keep-fat` (keep the FAT binary), `--force` (overwrite the
 output), `--patch-set ID`.
+
+The suggested output name is `MHFU_patched.ipa`; if it already exists the CLI
+uses `MHFU_patched-2.ipa`, `MHFU_patched-3.ipa`, and so on.
 
 Exit codes: `0` success · `2` unsupported input · `3` binary bytes do not match
 · `4` not enough disk space.
@@ -88,8 +94,9 @@ Exit codes: `0` success · `2` unsupported input · `3` binary bytes do not matc
 ## Installing on device
 
 The output IPA is unsigned. Install it with **AltStore**, **Sideloadly**, or a
-similar tool — the installer re-signs it with your Apple ID. The version shown
-in Settings must match the version entered in the patcher.
+similar tool — the installer re-signs it with your Apple ID. The app keeps its
+source version unless you pass `--version`; the version shown in Settings is
+whatever was written to `Info.plist`.
 
 ## Verification
 
@@ -150,10 +157,10 @@ MHFU_E2E=1 .venv/bin/python -m unittest tests.test_cli_e2e -v
 # regenerate the manifest from a binary pair
 python3 tools/make_manifest.py \
   --original-ipa "original.ipa" \
-  --final-bin ../re_mhfu/mh_unite_c194 \
-  --intermediate-bin ../re_mhfu/mh_unite_base186 \
-  --patched-ipa ../MHFU_load194.ipa \
-  --out patches/mhfu-1.00.194.json
+  --final-bin ../re_mhfu/final-arm64 \
+  --intermediate-bin ../re_mhfu/intermediate-arm64 \
+  --patched-ipa ../reference-patched.ipa \
+  --out patches/mhfu-ios.json
 ```
 
 Layout:

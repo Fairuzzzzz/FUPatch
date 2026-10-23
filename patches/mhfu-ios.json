@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "id": "mhfu-ios-1.00.194",
+  "id": "mhfu-ios",
   "title": "MHFU iOS — safe area, analog, loading/map, coating frame",
   "app": {
     "bundle_id": "jp.co.capcom.mhp2gwd",
@@ -336,7 +336,6 @@
     ]
   },
   "version": {
-    "default": "1.00.194",
     "marker_key": "MHFUPatch"
   }
 }

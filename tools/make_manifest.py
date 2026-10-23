@@ -4,11 +4,10 @@
 Example:
   python3 tools/make_manifest.py \
       --original-ipa "original.ipa" \
-      --final-bin ../re_mhfu/mh_unite_c194 \
-      --intermediate-bin ../re_mhfu/mh_unite_base186 \
-      --patched-ipa ../MHFU_load194.ipa \
-      --id mhfu-ios-1.00.194 --version 1.00.194 \
-      --out patches/mhfu-1.00.194.json
+      --final-bin ../re_mhfu/final-arm64 \
+      --intermediate-bin ../re_mhfu/intermediate-arm64 \
+      --patched-ipa ../reference-patched.ipa \
+      --out patches/mhfu-ios.json
 """
 import argparse
 import hashlib
@@ -112,11 +111,10 @@ def main():
     ap.add_argument('--final-bin', required=True)
     ap.add_argument('--intermediate-bin')
     ap.add_argument('--patched-ipa', help='tested build IPA (for the package delta)')
-    ap.add_argument('--id', default='mhfu-ios-1.00.194')
+    ap.add_argument('--id', default='mhfu-ios')
     ap.add_argument('--title', default='MHFU iOS — safe area, analog, loading/map, '
                                       'coating frame')
-    ap.add_argument('--version', default='1.00.194')
-    ap.add_argument('--out', default=os.path.join(ROOT, 'patches', 'mhfu-1.00.194.json'))
+    ap.add_argument('--out', default=os.path.join(ROOT, 'patches', 'mhfu-ios.json'))
     args = ap.parse_args()
 
     old, plist = read_arm64(args.original_ipa)
@@ -160,7 +158,7 @@ def main():
         'members_remove': {},
         'members_add': [],
         'info_changes': {'set': {}, 'remove': []},
-        'version': {'default': args.version, 'marker_key': 'MHFUPatch'},
+        'version': {'marker_key': 'MHFUPatch'},
     }
     if args.intermediate_bin:
         manifest['slice']['intermediate_sha256'].append(

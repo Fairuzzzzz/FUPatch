@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "default": "mhfu-ios-1.00.194",
+  "default": "mhfu-ios",
   "sets": [
     {
-      "id": "mhfu-ios-1.00.194",
-      "file": "mhfu-1.00.194.json",
+      "id": "mhfu-ios",
+      "file": "mhfu-ios.json",
       "title": "MHFU iOS — safe area, analog, loading/map, coating frame"
     }
   ]

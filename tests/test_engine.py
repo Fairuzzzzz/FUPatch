@@ -106,7 +106,7 @@ class LookAndPatchTest(unittest.TestCase):
         out = os.path.join(self.tmp.name, 'out.ipa')
         report = engine.patch(self.ipa, out, dry_run=True)
         self.assertFalse(os.path.exists(out))
-        self.assertEqual(report['version'], '1.00.194')
+        self.assertEqual(report['version'], '1.00.11')
         self.assertEqual(len(report['applied']), 36)
         self.assertEqual(report['members'], 4)
 

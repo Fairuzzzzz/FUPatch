@@ -109,7 +109,6 @@ def look(ipa_path, patch_set=None, directory=None):
         'match': kind,
         'patch_set': None,
         'patch_title': None,
-        'patch_version': None,
         'features': [],
         'steps_total': 0,
         'steps_pending': 0,
@@ -126,7 +125,6 @@ def look(ipa_path, patch_set=None, directory=None):
         return report
     report['patch_set'] = m['id']
     report['patch_title'] = m.get('title', m['id'])
-    report['patch_version'] = (m.get('version') or {}).get('default')
     used = {step['feature'] for step in m['binary_steps']}
     report['features'] = [f for f in m.get('features', []) if f['id'] in used]
     report['steps_total'] = len(m['binary_steps'])
@@ -163,26 +161,10 @@ def look(ipa_path, patch_set=None, directory=None):
     return report
 
 
-def suggest_version(info):
-    """Reasonable version for the next build."""
-    unchanged = (info['match'] == 'result'
-                 or (not info['steps_pending'] and not info['remove_pending']
-                     and not info['add_pending']))
-    if unchanged:
-        parts = str(info.get('info_version') or info.get('patch_version')
-                    or '1.00.194').split('.')
-        try:
-            parts[-1] = str(int(parts[-1]) + 1)
-        except ValueError:
-            pass
-        return '.'.join(parts)
-    return info.get('patch_version') or '1.00.194'
-
-
-def suggest_output(ipa_path, version):
-    """Output name that is still free, in the source IPA folder."""
+def suggest_output(ipa_path):
+    """Output path that is still free, next to the source IPA."""
     folder = os.path.dirname(os.path.abspath(ipa_path)) or '.'
-    name = 'MHFU_patched_%s' % version
+    name = 'MHFU_patched'
     candidate = os.path.join(folder, name + '.ipa')
     n = 2
     while os.path.exists(candidate):
@@ -243,14 +225,15 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
         raise PatchError('not enough disk space: need %.0f MB, %.0f MB free'
                          % (need / 1e6, free / 1e6))
 
-    ver = version or (m.get('version') or {}).get('default') or info['info_version']
-    if not VERSION_RE.match(ver or ''):
-        raise PatchError('invalid version %r (example: 1.00.194)' % ver)
-    if ver == info['info_version'] and not info['steps_pending'] \
-            and not info['remove_pending'] and not info['add_pending'] \
-            and not dry_run:
-        raise PatchError('nothing to change and the version is still %s — '
-                         'use another version, e.g. 1.00.195' % ver)
+    ver = version or info['info_version']
+    if not ver:
+        raise PatchError('source Info.plist has no version — pass --version')
+    if not VERSION_RE.match(ver):
+        raise PatchError('invalid version %r' % ver)
+    already = (not info['steps_pending'] and not info['remove_pending']
+               and not info['add_pending'])
+    if already and ver == info['info_version'] and not dry_run:
+        raise PatchError('this IPA is already patched')
 
     _emit(on_event, 'read', 5, info['exe_member'])
     data = ziprewrite.read_member(ipa_path, info['exe_member'])

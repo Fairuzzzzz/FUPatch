@@ -89,6 +89,9 @@ def cmd_patch(args):
     print()
     if report.get('dry_run'):
         print('DRY RUN — no file written')
+        if report['old_version'] == report['version']:
+        print('  version : %s (unchanged)' % report['version'])
+    else:
         print('  version : %s -> %s' % (report['old_version'], report['version']))
         print('  steps   : %d applied, %d skipped'
               % (len(report['applied']), len(report['skipped'])))
@@ -99,7 +102,10 @@ def cmd_patch(args):
     print('DONE in %.1f s' % report['duration'])
     print('  output  : %s (%.1f MB, %d files)'
           % (report['out'], _mb(report['size']), report['members']))
-    print('  version : %s -> %s' % (report['old_version'], report['version']))
+    if report['old_version'] == report['version']:
+        print('  version : %s (unchanged)' % report['version'])
+    else:
+        print('  version : %s -> %s' % (report['old_version'], report['version']))
     print('  binary  : %s, slice sha %s'
           % (report['exe_kind_out'], report['slice_sha256']))
     print('  steps   : %d applied, %d skipped'
@@ -139,7 +145,7 @@ def build_parser():
     p = sub.add_parser('patch', help='patch an IPA')
     p.add_argument('--ipa', required=True)
     p.add_argument('--out', required=True)
-    p.add_argument('--version', help='new version (default: from patch set)')
+    p.add_argument('--version', help='override the app version (default: keep the source version)')
     p.add_argument('--keep-fat', action='store_true',
                    help='keep the FAT binary (default: thin arm64)')
     p.add_argument('--dry-run', action='store_true')

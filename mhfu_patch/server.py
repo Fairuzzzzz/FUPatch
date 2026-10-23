@@ -145,9 +145,7 @@ def make_app(patch_dir=None, workdir=None):
                 app.state.patch_dir)
         except engine.PatchError as exc:
             fail(400, str(exc))
-        version = engine.suggest_version(info)
-        info['suggest'] = {'version': version,
-                           'out': engine.suggest_output(info['ipa'], version)}
+        info['suggest'] = {'out': engine.suggest_output(info['ipa'])}
         info['patches_ok'] = info['supported'] and not info['cryptid']
         return {'ok': True, 'info': info}
 
@@ -193,18 +191,16 @@ def make_app(patch_dir=None, workdir=None):
         if not info['supported']:
             os.remove(dest)
             fail(400, info['reason'] or 'unsupported IPA')
-        version = engine.suggest_version(info)
         job_dir = os.path.join(root, 'job-' + token)
         os.makedirs(job_dir, exist_ok=True)
         app.state.uploads[token] = {
             'path': dest,
             'name': name,
-            'out': os.path.join(job_dir, 'MHFU_patched_%s.ipa' % version),
-            'version': version,
+            'out': os.path.join(job_dir, 'MHFU_patched.ipa'),
             'dir': job_dir,
         }
         return {'ok': True, 'upload': token, 'name': name, 'size': received,
-                'version': version, 'app': info.get('app_name')}
+                'app': info.get('app_name')}
 
     @app.post('/api/start')
     async def api_start(request: Request):
@@ -218,7 +214,7 @@ def make_app(patch_dir=None, workdir=None):
         def run(job):
             try:
                 report = engine.patch(
-                    entry['path'], entry['out'], version=entry['version'],
+                    entry['path'], entry['out'],
                     on_event=job.emit, is_cancelled=lambda: job.cancel,
                     directory=app.state.patch_dir, force=True)
                 report['out_name'] = os.path.basename(report.get('out') or '')

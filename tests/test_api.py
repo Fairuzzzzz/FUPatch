@@ -122,7 +122,7 @@ class ApiTest(unittest.TestCase):
     def test_hello(self):
         _status, data = self.req('/api/hello')
         self.assertTrue(data['ok'])
-        self.assertEqual(data['patch_sets'][0]['id'], 'mhfu-ios-1.00.194')
+        self.assertEqual(data['patch_sets'][0]['id'], 'mhfu-ios')
 
     # ---------- inspect ----------
     def test_inspect(self):
@@ -140,15 +140,14 @@ class ApiTest(unittest.TestCase):
     def test_suggest(self):
         _status, data = self.req('/api/inspect', {'ipa': self.ipa})
         suggest = data['info']['suggest']
-        self.assertEqual(suggest['version'], '1.00.194')
-        self.assertTrue(suggest['out'].endswith('.ipa'))
+        self.assertTrue(suggest['out'].endswith('MHFU_patched.ipa'))
         self.assertNotEqual(suggest['out'], self.ipa)
 
     # ---------- upload ----------
     def test_upload_accepts_any_name(self):
         data = self.upload(name='notes.txt')
         self.assertTrue(data['ok'])
-        self.assertEqual(data['version'], '1.00.194')
+        self.assertTrue(data['upload'])
 
     def test_upload_rejects_garbage(self):
         junk = os.path.join(self.tmp.name, 'junk.ipa')
@@ -158,10 +157,10 @@ class ApiTest(unittest.TestCase):
             self.upload(junk)
         self.assertEqual(ctx.exception.code, 400)
 
-    def test_upload_reports_version(self):
-        data = self.upload(name='version.ipa')
+    def test_upload_reports_size(self):
+        data = self.upload(name='size.ipa')
         self.assertTrue(data['ok'])
-        self.assertEqual(data['version'], '1.00.194')
+        self.assertEqual(data['size'], os.path.getsize(self.ipa))
         self.assertTrue(data['upload'])
 
     # ---------- jobs ----------
@@ -185,9 +184,9 @@ class ApiTest(unittest.TestCase):
         self.assertGreater(events, 0)
         self.assertIsNotNone(final)
         self.assertEqual(final['state'], 'done', final)
-        self.assertEqual(final['result']['version'], '1.00.194')
+        self.assertEqual(final['result']['version'], '1.00.11')
         self.assertEqual(final['result']['slice_sha256'], RESULT_SHA)
-        self.assertTrue(final['result']['out_name'].endswith('.ipa'))
+        self.assertEqual(final['result']['out_name'], 'MHFU_patched.ipa')
         out = final['result']['out']
         self.assertTrue(os.path.isabs(out))
         with open(out, 'rb') as fh:

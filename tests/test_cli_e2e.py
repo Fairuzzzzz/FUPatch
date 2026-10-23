@@ -42,8 +42,7 @@ class CliE2ETest(unittest.TestCase):
         before = file_sha(ORIGINAL_IPA)
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, 'out.ipa')
-            cp = self.run_cli('patch', '--ipa', ORIGINAL_IPA, '--out', out,
-                              '--version', '1.00.194')
+            cp = self.run_cli('patch', '--ipa', ORIGINAL_IPA, '--out', out)
             self.assertEqual(cp.returncode, 0, cp.stdout + cp.stderr)
             self.assertTrue(os.path.exists(out))
 
@@ -58,7 +57,7 @@ class CliE2ETest(unittest.TestCase):
                 exe = zf.read('Payload/MH Unite.app/MH Unite')
                 self.assertEqual(hashlib.sha256(exe).hexdigest(), RESULT_SHA)
                 pl = plistlib.loads(zf.read('Payload/MH Unite.app/Info.plist'))
-                self.assertEqual(pl['CFBundleShortVersionString'], '1.00.194')
+                self.assertEqual(pl['CFBundleShortVersionString'], '1.00.11')
                 self.assertIn('MHFUPatch', pl)
         self.assertEqual(before, file_sha(ORIGINAL_IPA),
                          'IPA sumber berubah!')
