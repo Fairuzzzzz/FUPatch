@@ -2,28 +2,28 @@ import hashlib
 import json
 import os
 import tempfile
-import threading
 import time
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from tests.common import ORIG_BIN, RESULT_SHA, have, make_synthetic_ipa
 from mhfu_patch import server
 
 
-@unittest.skipUnless(have(ORIG_BIN), 'biner golden tidak tersedia')
+@unittest.skipUnless(have(ORIG_BIN), 'golden binary not available')
 class ApiTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
-        cls.ipa = make_synthetic_ipa(os.path.join(cls.tmp.name, 'in.ipa'),
-                                     open(ORIG_BIN, 'rb').read())
-        cls.httpd, cls.state = server.make_server(port=0)
+        cls.work = os.path.join(cls.tmp.name, 'work')
+        with open(ORIG_BIN, 'rb') as fh:
+            exe = fh.read()
+        cls.ipa = make_synthetic_ipa(os.path.join(cls.tmp.name, 'in.ipa'), exe)
+        cls.httpd, cls.state = server.make_server(port=0, workdir=cls.work)
         cls.port = cls.httpd.server_address[1]
         cls.base = 'http://127.0.0.1:%d' % cls.port
-        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
-        cls.thread.start()
 
     @classmethod
     def tearDownClass(cls):
@@ -31,23 +31,49 @@ class ApiTest(unittest.TestCase):
         cls.httpd.server_close()
         cls.tmp.cleanup()
 
-    # ---------- helper ----------
-    def req(self, path, body=None, token=True, method=None):
-        data = None if body is None else json.dumps(body).encode()
-        req = urllib.request.Request(self.base + path, data=data,
-                                     method=method or ('GET' if body is None else 'POST'))
+    # ---------- helpers ----------
+    def req(self, path, body=None, token=True, method=None, raw=None,
+            headers=None):
+        data = raw if raw is not None else (
+            None if body is None else json.dumps(body).encode())
+        req = urllib.request.Request(
+            self.base + path, data=data,
+            method=method or ('GET' if data is None else 'POST'))
         if body is not None:
             req.add_header('Content-Type', 'application/json')
         if token:
             req.add_header('X-Patch-Token', self.state['token'])
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw = resp.read()
-            ctype = resp.headers.get('Content-Type', '')
-            if 'json' in ctype:
-                return resp.status, json.loads(raw.decode())
-            return resp.status, raw
+        for key, value in (headers or {}).items():
+            req.add_header(key, value)
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                payload = resp.read()
+                ctype = resp.headers.get('Content-Type', '')
+                if 'json' in ctype:
+                    return resp.status, json.loads(payload.decode())
+                return resp.status, payload
+        except urllib.error.HTTPError as exc:
+            exc.read()
+            exc.close()
+            raise
 
-    def wait_job(self, job_id, timeout=60):
+    def upload(self, path=None, name=None, token=True):
+        path = path or self.ipa
+        with open(path, 'rb') as fh:
+            blob = fh.read()
+        headers = {
+            'Content-Type': 'application/octet-stream',
+            'X-Filename': urllib.parse.quote(name or os.path.basename(path)),
+        }
+        _status, data = self.req('/api/upload', raw=blob, token=token,
+                                 headers=headers)
+        return data
+
+    def start(self, upload_id):
+        _status, data = self.req('/api/start', {'upload': upload_id})
+        return data['job']
+
+    def wait_job(self, job_id, timeout=120):
         deadline = time.time() + timeout
         while time.time() < deadline:
             _status, data = self.req('/api/job/' + job_id)
@@ -55,17 +81,16 @@ class ApiTest(unittest.TestCase):
             if job['state'] != 'running':
                 return job
             time.sleep(0.05)
-        self.fail('job tidak selesai dalam %.0f s' % timeout)
+        self.fail('job did not finish in %.0f s' % timeout)
 
-    def start(self, **over):
-        body = {'ipa': self.ipa,
-                'out': os.path.join(self.tmp.name, 'out.ipa'),
-                'version': '1.00.194'}
-        body.update(over)
-        _status, data = self.req('/api/start', body)
-        return data['job']
+    def patch_once(self):
+        up = self.upload(name='run.ipa')
+        job = self.start(up['upload'])
+        done = self.wait_job(job['id'])
+        self.assertEqual(done['state'], 'done', done)
+        return done
 
-    # ---------- tes ----------
+    # ---------- static ----------
     def test_index_injects_token(self):
         status, body = self.req('/', token=False)
         self.assertEqual(status, 200)
@@ -73,10 +98,15 @@ class ApiTest(unittest.TestCase):
         self.assertIn(self.state['token'].encode(), body)
 
     def test_static_css(self):
-        status, body = self.req('/style.css', token=False)
+        import re
+        _status, html = self.req('/', token=False)
+        match = re.search(rb'/assets/[^\"\']+\.css', html)
+        self.assertIsNotNone(match, 'index.html does not reference built CSS')
+        status, body = self.req(match.group(0).decode(), token=False)
         self.assertEqual(status, 200)
-        self.assertIn(b'--accent', body)
+        self.assertIn(b'--background', body)
 
+    # ---------- auth ----------
     def test_auth_required(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self.req('/api/hello', token=False)
@@ -84,18 +114,17 @@ class ApiTest(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self.req('/api/inspect', {'ipa': self.ipa}, token=False)
         self.assertEqual(ctx.exception.code, 403)
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self.req('/api/upload', raw=b'x', token=False,
+                     headers={'X-Filename': 'x.ipa'})
+        self.assertEqual(ctx.exception.code, 403)
 
     def test_hello(self):
         _status, data = self.req('/api/hello')
         self.assertTrue(data['ok'])
         self.assertEqual(data['patch_sets'][0]['id'], 'mhfu-ios-1.00.194')
 
-    def test_list(self):
-        _status, data = self.req('/api/list', {'path': self.tmp.name})
-        self.assertTrue(data['ok'])
-        names = [f['name'] for f in data['files']]
-        self.assertIn('in.ipa', names)
-
+    # ---------- inspect ----------
     def test_inspect(self):
         _status, data = self.req('/api/inspect', {'ipa': self.ipa})
         info = data['info']
@@ -105,24 +134,45 @@ class ApiTest(unittest.TestCase):
 
     def test_inspect_missing(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
-            self.req('/api/inspect', {'ipa': '/tidak/ada.ipa'})
+            self.req('/api/inspect', {'ipa': '/does/not/exist.ipa'})
         self.assertEqual(ctx.exception.code, 400)
 
-    def test_dry_run_job(self):
-        job = self.start(dry_run=True)
-        done = self.wait_job(job['id'])
-        self.assertEqual(done['state'], 'done', done)
-        self.assertTrue(done['result']['dry_run'])
-        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, 'out.ipa')))
+    def test_suggest(self):
+        _status, data = self.req('/api/inspect', {'ipa': self.ipa})
+        suggest = data['info']['suggest']
+        self.assertEqual(suggest['version'], '1.00.194')
+        self.assertTrue(suggest['out'].endswith('.ipa'))
+        self.assertNotEqual(suggest['out'], self.ipa)
 
+    # ---------- upload ----------
+    def test_upload_accepts_any_name(self):
+        data = self.upload(name='notes.txt')
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['version'], '1.00.194')
+
+    def test_upload_rejects_garbage(self):
+        junk = os.path.join(self.tmp.name, 'junk.ipa')
+        with open(junk, 'wb') as fh:
+            fh.write(b'not a zip at all' * 100)
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self.upload(junk)
+        self.assertEqual(ctx.exception.code, 400)
+
+    def test_upload_reports_version(self):
+        data = self.upload(name='version.ipa')
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['version'], '1.00.194')
+        self.assertTrue(data['upload'])
+
+    # ---------- jobs ----------
     def test_patch_job_and_sse(self):
-        out = os.path.join(self.tmp.name, 'sse.ipa')
-        job = self.start(out=out, version='1.00.197')
-        url = '%s/api/job/%s/events?token=%s' % (self.base, job['id'],
-                                                 self.state['token'])
+        up = self.upload(name='sse.ipa')
+        job = self.start(up['upload'])
+        url = '%s/api/job/%s/events?token=%s' % (
+            self.base, job['id'], self.state['token'])
         events = 0
         final = None
-        with urllib.request.urlopen(url, timeout=120) as resp:
+        with urllib.request.urlopen(url, timeout=180) as resp:
             for raw in resp:
                 line = raw.decode().strip()
                 if not line.startswith('data: '):
@@ -134,32 +184,48 @@ class ApiTest(unittest.TestCase):
                 events += 1
         self.assertGreater(events, 0)
         self.assertIsNotNone(final)
-        self.assertEqual(final['state'], 'done')
-        self.assertTrue(os.path.exists(out))
-        self.assertEqual(final['result']['version'], '1.00.197')
+        self.assertEqual(final['state'], 'done', final)
+        self.assertEqual(final['result']['version'], '1.00.194')
         self.assertEqual(final['result']['slice_sha256'], RESULT_SHA)
+        self.assertTrue(final['result']['out_name'].endswith('.ipa'))
+        out = final['result']['out']
+        self.assertTrue(os.path.isabs(out))
         with open(out, 'rb') as fh:
             self.assertEqual(hashlib.sha256(fh.read()).hexdigest(),
                              final['result']['output_sha256'])
+        # upload temp file is removed once the job is done
+        self.assertEqual(self.state['uploads'], {})
 
-    def test_reveal_only_last_output(self):
-        out = os.path.join(self.tmp.name, 'reveal.ipa')
-        job = self.start(out=out)
-        self.wait_job(job['id'])
-        status, data = self.req('/api/reveal', {'path': out})
-        self.assertTrue(data['ok'])
+    def test_download(self):
+        done = self.patch_once()
+        path = '/api/download/%s?token=%s' % (
+            done['id'], urllib.parse.quote(self.state['token']))
+        status, blob = self.req(path, token=False)
+        self.assertEqual(status, 200)
+        self.assertEqual(hashlib.sha256(blob).hexdigest(),
+                         done['result']['output_sha256'])
+
+    def test_download_unknown_job(self):
+        path = '/api/download/nope?token=%s' % urllib.parse.quote(
+            self.state['token'])
         with self.assertRaises(urllib.error.HTTPError) as ctx:
-            self.req('/api/reveal', {'path': self.ipa})
+            self.req(path, token=False)
+        self.assertEqual(ctx.exception.code, 404)
+
+    def test_download_requires_token(self):
+        done = self.patch_once()
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self.req('/api/download/' + done['id'], token=False)
         self.assertEqual(ctx.exception.code, 403)
 
     def test_cancel_unknown(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
-            self.req('/api/cancel', {'job': 'tidak-ada'})
+            self.req('/api/cancel', {'job': 'does-not-exist'})
         self.assertEqual(ctx.exception.code, 404)
 
     def test_unknown_route(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
-            self.req('/api/tidak-ada', {})
+            self.req('/api/does-not-exist', {})
         self.assertEqual(ctx.exception.code, 404)
 
 
