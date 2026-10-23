@@ -24,7 +24,7 @@ class StepMismatch(PatchError):
         self.found = found.hex()
         self.expected = expected.hex()
         super().__init__(
-            'langkah %s pada %#x tidak cocok (di biner: %s, seharusnya: %s)'
+            'step %s at %#x does not match (found: %s, expected: %s)'
             % (step['id'], offset, self.found, self.expected))
 
 
@@ -58,27 +58,27 @@ def look(ipa_path, patch_set=None, directory=None):
     """Inspeksi IPA tanpa mengubah apa pun."""
     ipa_path = os.path.abspath(ipa_path)
     if not os.path.isfile(ipa_path):
-        raise PatchError('IPA tidak ada: %s' % ipa_path)
+        raise PatchError('IPA not found: %s' % ipa_path)
     idx = ziprewrite.read_index(ipa_path)
     names = [_decode(e['name']) for e in idx['entries']]
     info_member = _info_member(names)
     if not info_member:
-        raise PatchError('Info.plist tidak ditemukan di dalam IPA')
+        raise PatchError('Info.plist not found inside the IPA')
     app_dir = info_member.rsplit('/', 1)[0]
     raw_plist = ziprewrite.read_member(ipa_path, info_member)
     pl = plistlib.loads(raw_plist)
     exe = pl.get('CFBundleExecutable')
     if not exe:
-        raise PatchError('CFBundleExecutable kosong di Info.plist')
+        raise PatchError('CFBundleExecutable is missing from Info.plist')
     exe_member = app_dir + '/' + exe
     if exe_member not in names:
-        raise PatchError('biner %s tidak ada di dalam IPA' % exe_member)
+        raise PatchError('executable %s not found inside the IPA' % exe_member)
 
     data = ziprewrite.read_member(ipa_path, exe_member)
     ma = macho.analyze(data)
     arm = macho.find_arm64(ma)
     if arm is None:
-        raise PatchError('IPA tidak punya slice arm64 (isi: %s)'
+        raise PatchError('IPA has no arm64 slice (found: %s)'
                          % ', '.join(s['arch'] for s in ma['slices']))
 
     m, kind = (None, None)
@@ -121,8 +121,8 @@ def look(ipa_path, patch_set=None, directory=None):
     }
 
     if not m:
-        report['reason'] = ('biner tidak dikenal (sha %s) — bukan IPA MHFU yang '
-                            'didukung' % arm['sha256'][:16])
+        report['reason'] = ('unknown binary (sha %s) — not a supported MHFU IPA'
+                            % arm['sha256'][:16])
         return report
     report['patch_set'] = m['id']
     report['patch_title'] = m.get('title', m['id'])
@@ -155,12 +155,40 @@ def look(ipa_path, patch_set=None, directory=None):
           and not report['steps_mismatch'])
     report['supported'] = ok
     if arm.get('encrypted'):
-        report['reason'] = ('IPA masih terenkripsi (cryptid=%s) — butuh IPA hasil '
-                            'dekripsi' % arm.get('cryptid'))
+        report['reason'] = ('IPA is still encrypted (cryptid=%s) — a decrypted IPA is '
+                            'required' % arm.get('cryptid'))
     elif report['steps_mismatch']:
-        report['reason'] = ('biner cocok sebagian; langkah tidak dikenali: %s'
+        report['reason'] = ('binary partially matches; unrecognized steps: %s'
                             % ', '.join(report['steps_mismatch'][:4]))
     return report
+
+
+def suggest_version(info):
+    """Versi yang masuk akal untuk build berikutnya."""
+    unchanged = (info['match'] == 'result'
+                 or (not info['steps_pending'] and not info['remove_pending']
+                     and not info['add_pending']))
+    if unchanged:
+        parts = str(info.get('info_version') or info.get('patch_version')
+                    or '1.00.194').split('.')
+        try:
+            parts[-1] = str(int(parts[-1]) + 1)
+        except ValueError:
+            pass
+        return '.'.join(parts)
+    return info.get('patch_version') or '1.00.194'
+
+
+def suggest_output(ipa_path, version):
+    """Nama file hasil yang belum dipakai, di folder IPA sumber."""
+    folder = os.path.dirname(os.path.abspath(ipa_path)) or '.'
+    name = 'MHFU_patched_%s' % version
+    candidate = os.path.join(folder, name + '.ipa')
+    n = 2
+    while os.path.exists(candidate):
+        candidate = os.path.join(folder, '%s-%d.ipa' % (name, n))
+        n += 1
+    return candidate
 
 
 def apply_steps(slice_bytes, m, on_step=None):
@@ -174,7 +202,7 @@ def apply_steps(slice_bytes, m, on_step=None):
         exp = bytes.fromhex(step['expect'])
         rep = bytes.fromhex(step['replace'])
         if off + len(exp) > len(buf):
-            raise PatchError('langkah %s melewati akhir slice' % step['id'])
+            raise PatchError('step %s runs past the end of the slice' % step['id'])
         cur = bytes(buf[off:off + len(exp)])
         if cur == rep:
             skipped.append(step['id'])
@@ -196,61 +224,60 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
     ipa_path = os.path.abspath(ipa_path)
     out_path = os.path.abspath(out_path)
     if out_path == ipa_path:
-        raise PatchError('file keluaran tidak boleh sama dengan IPA sumber')
+        raise PatchError('output file must differ from the source IPA')
     if os.path.exists(out_path) and not force:
-        raise PatchError('file keluaran sudah ada: %s' % out_path)
+        raise PatchError('output file already exists: %s' % out_path)
     out_dir = os.path.dirname(out_path) or '.'
     if not os.path.isdir(out_dir):
-        raise PatchError('folder keluaran tidak ada: %s' % out_dir)
+        raise PatchError('output folder does not exist: %s' % out_dir)
 
-    _emit(on_event, 'inspeksi', 1, 'membaca IPA')
+    _emit(on_event, 'inspect', 1, 'reading IPA')
     info = look(ipa_path, patch_set=patch_set, directory=directory)
     if not info['supported']:
-        raise PatchError(info['reason'] or 'IPA tidak didukung')
+        raise PatchError(info['reason'] or 'unsupported IPA')
     m = mf.load_set(info['patch_set'], directory)
 
     need = info['size'] + (32 << 20)
     free = shutil.disk_usage(out_dir).free
     if free < need:
-        raise PatchError('ruang disk kurang: perlu %.0f MB, tersedia %.0f MB'
+        raise PatchError('not enough disk space: need %.0f MB, %.0f MB free'
                          % (need / 1e6, free / 1e6))
 
     ver = version or (m.get('version') or {}).get('default') or info['info_version']
     if not VERSION_RE.match(ver or ''):
-        raise PatchError('versi %r tidak valid (contoh: 1.00.194)' % ver)
+        raise PatchError('invalid version %r (example: 1.00.194)' % ver)
     if ver == info['info_version'] and not info['steps_pending'] \
             and not info['remove_pending'] and not info['add_pending'] \
             and not dry_run:
-        raise PatchError('tidak ada yang perlu diubah dan versi masih %s — '
-                         'pakai versi lain, mis. 1.00.195' % ver)
+        raise PatchError('nothing to change and the version is still %s — '
+                         'use another version, e.g. 1.00.195' % ver)
 
-    _emit(on_event, 'baca biner', 5, info['exe_member'])
+    _emit(on_event, 'read', 5, info['exe_member'])
     data = ziprewrite.read_member(ipa_path, info['exe_member'])
     ma = macho.analyze(data)
     arm = macho.find_arm64(ma)
     slice_bytes = macho.extract(data, arm)
-    _emit(on_event, 'verifikasi', 8, 'sha slice %s' % arm['sha256'][:16])
+    _emit(on_event, 'verify', 8, 'slice sha %s' % arm['sha256'][:16])
 
     def on_step(done, total):
         if is_cancelled and is_cancelled():
-            raise PatchError('dibatalkan pengguna')
+            raise PatchError('cancelled by user')
         pct = 10 + int(14 * done / max(1, total))
-        _emit(on_event, 'langkah biner', pct, '%d/%d langkah' % (done, total))
+        _emit(on_event, 'steps', pct, '%d/%d' % (done, total))
 
     new_slice, applied, skipped = apply_steps(slice_bytes, m, on_step)
     got = hashlib.sha256(new_slice).hexdigest()
     if got != m['slice']['result_sha256']:
-        raise PatchError('sha biner hasil tidak cocok\n  didapat : %s\n  harapan : %s'
+        raise PatchError('resulting binary sha mismatch\n  got     : %s\n  expected: %s'
                          % (got, m['slice']['result_sha256']))
-    _emit(on_event, 'langkah biner', 24, 'sha biner hasil cocok')
+    _emit(on_event, 'steps', 24, 'binary sha ok')
 
     fat_out = bool(keep_fat and ma['kind'] == 'fat')
     new_exe = macho.replace_slice(data, arm, new_slice) if fat_out else new_slice
 
-    _emit(on_event, 'Info.plist', 25, 'versi %s -> %s' % (info['info_version'], ver))
+    _emit(on_event, 'plist', 25, 'version %s -> %s' % (info['info_version'], ver))
     raw_plist = ziprewrite.read_member(ipa_path, info['info_member'])
-    new_plist = package.patch_info_plist(
-        raw_plist, m, ver, marker_suffix=time.strftime('%Y-%m-%d'))
+    new_plist = package.patch_info_plist(raw_plist, m, ver)
 
     idx = ziprewrite.read_index(ipa_path)
     names = [_decode(e['name']) for e in idx['entries']]
@@ -280,7 +307,7 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
     if dry_run:
         report['members'] = len(names) - len(removals) + len(additions)
         report['duration'] = round(time.monotonic() - started, 2)
-        _emit(on_event, 'selesai', 100, 'dry run')
+        _emit(on_event, 'done', 100, 'dry run')
         return report
 
     replacements = {
@@ -292,24 +319,24 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
 
     def zip_progress(done, total, wb, tb):
         if is_cancelled and is_cancelled():
-            raise PatchError('dibatalkan pengguna')
+            raise PatchError('cancelled by user')
         pct = 25 + int(67 * (wb / max(1, tb)))
-        _emit(on_event, 'tulis IPA', pct,
-              '%d/%d member · %.0f/%.0f MB' % (done, total, wb / 1e6, tb / 1e6))
+        _emit(on_event, 'write', pct,
+              '%d/%d files · %.0f/%.0f MB' % (done, total, wb / 1e6, tb / 1e6))
 
-    _emit(on_event, 'tulis IPA', 25, 'mulai menulis')
+    _emit(on_event, 'write', 25, 'starting')
     try:
         res = ziprewrite.rewrite(ipa_path, tmp, replacements, removals_b,
                                  additions, progress=zip_progress)
-        _emit(on_event, 'verifikasi', 93, 'cek ulang biner di IPA hasil')
+        _emit(on_event, 'verify', 93, 're-checking binary in output')
         back = ziprewrite.read_member(tmp, info['exe_member'])
         back_slice = macho.extract(back, macho.find_arm64(macho.analyze(back)))
         back_sha = hashlib.sha256(back_slice).hexdigest()
         if back_sha != m['slice']['result_sha256']:
-            raise PatchError('biner di IPA hasil tidak cocok (sha %s)' % back_sha)
+            raise PatchError('binary in output does not match (sha %s)' % back_sha)
         back_plist = plistlib.loads(ziprewrite.read_member(tmp, info['info_member']))
         if back_plist.get('CFBundleShortVersionString') != ver:
-            raise PatchError('versi di IPA hasil tidak sesuai')
+            raise PatchError('output version mismatch')
         os.replace(tmp, out_path)
     except BaseException:
         if os.path.exists(tmp):
@@ -320,5 +347,5 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
     report['size'] = os.path.getsize(out_path)
     report['duration'] = round(time.monotonic() - started, 2)
     report['output_sha256'] = _file_sha(out_path)
-    _emit(on_event, 'selesai', 100, 'IPA siap: %s' % out_path)
+    _emit(on_event, 'done', 100, 'ok')
     return report

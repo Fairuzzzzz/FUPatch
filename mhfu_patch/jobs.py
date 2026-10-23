@@ -10,7 +10,7 @@ class Job:
     def __init__(self, job_id):
         self.id = job_id
         self.state = 'running'          # running | done | error | cancelled
-        self.phase = 'menyiapkan'
+        self.phase = 'starting'
         self.pct = 0
         self.detail = ''
         self.result = None

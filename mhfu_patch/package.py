@@ -31,17 +31,17 @@ def resolve_additions(spec, names, base_dir):
     for item in spec or []:
         name = item.get('name')
         if not name:
-            raise PackageError('members_add tanpa name')
+            raise PackageError('members_add entry has no name')
         if name in names:
             continue
         data = item.get('data')
         if data is None:
             source = item.get('source')
             if not source:
-                raise PackageError('member %s tanpa source/data' % name)
+                raise PackageError('member %s has no source/data' % name)
             path = source if os.path.isabs(source) else os.path.join(base_dir, source)
             if not os.path.exists(path):
-                raise PackageError('fixture tidak ada: %s' % path)
+                raise PackageError('fixture not found: %s' % path)
             with open(path, 'rb') as fh:
                 data = fh.read()
         if isinstance(data, str):

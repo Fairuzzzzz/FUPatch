@@ -31,13 +31,13 @@ def read_index(path):
         buf = fh.read(back)
         pos = buf.rfind(EOCD_SIG)
         if pos < 0:
-            raise ZipError('EOCD tidak ditemukan (bukan zip?)')
+            raise ZipError('EOCD not found (not a zip?)')
         (sig, disk, cddisk, nrec, ntot, cdsize, cdoff,
          clen) = struct.unpack('<IHHHHIIH', buf[pos:pos + 22])
         if disk or cddisk or nrec != ntot:
-            raise ZipError('arsip multi-disk tidak didukung')
+            raise ZipError('multi-disk archives are not supported')
         if cdoff == 0xFFFFFFFF or cdsize == 0xFFFFFFFF or nrec == 0xFFFF:
-            raise ZipError('arsip ZIP64 tidak didukung')
+            raise ZipError('ZIP64 archives are not supported')
         comment = buf[pos + 22:pos + 22 + clen]
         fh.seek(cdoff)
         cd = fh.read(cdsize)
@@ -45,7 +45,7 @@ def read_index(path):
     i = 0
     while i < len(cd):
         if cd[i:i + 4] != CD_SIG:
-            raise ZipError('central directory rusak di offset %d' % i)
+            raise ZipError('central directory is corrupt at offset %d' % i)
         vals = struct.unpack(CD_FMT, cd[i:i + CD_SIZE])
         (sig, vmade, vneed, flags, method, mtime, mdate, crc, csize, usize,
          fnl, exl, cml, dstart, iattr, eattr, off) = vals
@@ -61,7 +61,7 @@ def read_index(path):
         })
         i = p + fnl + exl + cml
     if len(entries) != nrec:
-        raise ZipError('jumlah entri %d != %d menurut EOCD' % (len(entries), nrec))
+        raise ZipError('entry count %d != %d from EOCD' % (len(entries), nrec))
     return {'path': path, 'size': size, 'entries': entries, 'comment': comment}
 
 
@@ -75,7 +75,7 @@ def read_member(path, name):
         try:
             info = zf.getinfo(name)
         except KeyError:
-            raise ZipError('member %r tidak ada' % name)
+            raise ZipError('member %r not found' % name)
         return zf.read(info)
 
 
@@ -95,7 +95,7 @@ def rewrite(src, dst, replacements=None, removals=None, additions=None,
     present = {e['name'] for e in index['entries']}
     for name, _ in additions:
         if name in present:
-            raise ZipError('member %r sudah ada' % name.decode('utf-8', 'replace'))
+            raise ZipError('member %r already exists' % name.decode('utf-8', 'replace'))
 
     kept = [e for e in index['entries'] if e['name'] not in removals]
     total_bytes = sum(e['usize'] for e in kept) + sum(len(d) for _, d in additions)
@@ -110,13 +110,13 @@ def rewrite(src, dst, replacements=None, removals=None, additions=None,
             fi.seek(ent['off'])
             head = fi.read(30)
             if head[:4] != LH_SIG:
-                raise ZipError('local header rusak untuk %r' % ent['name'])
+                raise ZipError('local header is corrupt for %r' % ent['name'])
             lfnl, lexl = struct.unpack('<HH', head[26:30])
             lname = fi.read(lfnl)
             lextra = fi.read(lexl)
             raw = fi.read(ent['csize'])
             if len(raw) != ent['csize']:
-                raise ZipError('data terpotong untuk %r' % ent['name'])
+                raise ZipError('truncated data for %r' % ent['name'])
 
             crc, csize, usize = ent['crc'], ent['csize'], ent['usize']
             method = ent['method']

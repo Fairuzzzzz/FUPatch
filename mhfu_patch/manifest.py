@@ -34,42 +34,42 @@ def load_set(set_id=None, directory=None):
                 manifest = json.load(fh)
             validate(manifest)
             return manifest
-    raise ManifestError('patch set %r tidak ada di index' % set_id)
+    raise ManifestError('patch set %r not found in index' % set_id)
 
 
 def validate(m):
     need = ('schema', 'id', 'slice', 'binary_steps')
     for key in need:
         if key not in m:
-            raise ManifestError('manifest tanpa kunci %r' % key)
+            raise ManifestError('manifest missing key %r' % key)
     if m['schema'] != 1:
-        raise ManifestError('schema manifest tidak didukung: %r' % m['schema'])
+        raise ManifestError('unsupported manifest schema: %r' % m['schema'])
     sl = m['slice']
     for key in ('vaddr_base', 'result_sha256'):
         if key not in sl:
-            raise ManifestError('manifest tanpa slice.%s' % key)
+            raise ManifestError('manifest missing slice.%s' % key)
     int(sl['vaddr_base'], 0)
     result = sl['result_sha256']
     if len(result) != 64:
-        raise ManifestError('result_sha256 bukan sha256')
+        raise ManifestError('result_sha256 is not a sha256')
     base = int(sl['vaddr_base'], 0)
     spans = []
     for step in m['binary_steps']:
         for key in ('id', 'vaddr', 'expect', 'replace'):
             if key not in step:
-                raise ManifestError('langkah tanpa kunci %r' % key)
+                raise ManifestError('step missing key %r' % key)
         exp = bytes.fromhex(step['expect'])
         rep = bytes.fromhex(step['replace'])
         if len(exp) != len(rep):
-            raise ManifestError('langkah %s: panjang expect/replace beda' % step['id'])
+            raise ManifestError('step %s: expect/replace length mismatch' % step['id'])
         start = int(step['vaddr'], 0) - base
         if start < 0:
-            raise ManifestError('langkah %s: vaddr di luar slice' % step['id'])
+            raise ManifestError('step %s: vaddr outside the slice' % step['id'])
         spans.append((start, start + len(exp), step['id']))
     spans.sort()
     for (a0, a1, aid), (b0, b1, bid) in zip(spans, spans[1:]):
         if b0 < a1:
-            raise ManifestError('langkah %s dan %s tumpang tindih' % (aid, bid))
+            raise ManifestError('steps %s and %s overlap' % (aid, bid))
 
 
 def sha_sets(m):

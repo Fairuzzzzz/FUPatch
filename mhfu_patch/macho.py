@@ -35,13 +35,13 @@ def _u32be(data, off):
 
 def _thin_slice(data, offset, magic, cputype=None, cpusubtype=None):
     if offset + 32 > len(data):
-        raise MachOError('slice terpotong di offset %#x' % offset)
+        raise MachOError('truncated slice at offset %#x' % offset)
     if magic == MH_MAGIC_64:
         hdr = 32
     elif magic == MH_MAGIC:
         hdr = 28
     else:
-        raise MachOError('magic Mach-O tak dikenal %#x' % magic)
+        raise MachOError('unknown Mach-O magic %#x' % magic)
     cpu = _u32le(data, offset + 4)
     sub = _u32le(data, offset + 8)
     ncmds = _u32le(data, offset + 16)
@@ -50,11 +50,11 @@ def _thin_slice(data, offset, magic, cputype=None, cpusubtype=None):
     cryptoff = None
     for _ in range(ncmds):
         if off + 8 > len(data):
-            raise MachOError('load command terpotong')
+            raise MachOError('truncated load command')
         cmd = _u32le(data, off)
         size = _u32le(data, off + 4)
         if size < 8:
-            raise MachOError('load command rusak (%d byte)' % size)
+            raise MachOError('corrupt load command (%d bytes)' % size)
         if cmd in (LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64):
             cryptoff = _u32le(data, off + 8)
             cryptid = _u32le(data, off + 16)
@@ -80,7 +80,7 @@ def analyze(data):
     Setiap slice: arch, cputype, cpusubtype, offset, size, cryptid, encrypted.
     """
     if len(data) < 8:
-        raise MachOError('file terlalu pendek')
+        raise MachOError('file is too short')
     be = _u32be(data, 0)
     if be in (FAT_MAGIC, FAT_MAGIC_64):
         return _analyze_fat(data, be)
@@ -90,13 +90,13 @@ def analyze(data):
         sl['size'] = len(data)
         sl['sha256'] = hashlib.sha256(data).hexdigest()
         return {'kind': 'thin', 'slices': [sl], 'size': len(data)}
-    raise MachOError('bukan Mach-O (magic %#x / %#x)' % (be, le))
+    raise MachOError('not a Mach-O (magic %#x / %#x)' % (be, le))
 
 
 def _analyze_fat(data, magic):
     count = _u32be(data, 4)
     if count == 0 or count > 16:
-        raise MachOError('jumlah slice fat tidak masuk akal: %d' % count)
+        raise MachOError('unreasonable fat slice count: %d' % count)
     wide = magic == FAT_MAGIC_64
     entry = 32 if wide else 20
     base = 8
@@ -104,7 +104,7 @@ def _analyze_fat(data, magic):
     for i in range(count):
         off = base + i * entry
         if off + entry > len(data):
-            raise MachOError('fat header terpotong')
+            raise MachOError('truncated fat header')
         cpu = _u32be(data, off)
         sub = _u32be(data, off + 4)
         if wide:
@@ -114,7 +114,7 @@ def _analyze_fat(data, magic):
             start = _u32be(data, off + 8)
             size = _u32be(data, off + 12)
         if start + size > len(data):
-            raise MachOError('slice %d melewati akhir file' % i)
+            raise MachOError('slice %d runs past the end of the file' % i)
         sub_data = data[start:start + size]
         try:
             sl = _thin_slice(sub_data, 0, _u32le(sub_data, 0), cpu, sub)
@@ -145,7 +145,7 @@ def extract(data, sl):
 
 def replace_slice(data, sl, new_slice):
     if len(new_slice) != sl['size']:
-        raise MachOError('ukuran slice baru %d != %d' % (len(new_slice), sl['size']))
+        raise MachOError('new slice size %d != %d' % (len(new_slice), sl['size']))
     out = bytearray(data)
     out[sl['offset']:sl['offset'] + sl['size']] = new_slice
     return bytes(out)
