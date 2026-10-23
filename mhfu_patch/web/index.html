@@ -1,110 +1,14 @@
 <!doctype html>
-<html lang="id">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MHFU Patcher</title>
-<link rel="stylesheet" href="/style.css">
-</head>
-<body>
-<header class="top">
-  <div class="brand">
-    <div class="logo">MH</div>
-    <div>
-      <h1>MHFU Patcher</h1>
-      <p class="sub">Ubah <strong>IPA asli</strong> menjadi build patch lengkap
-        (safe area, analog, loading/peta, bingkai coating) — setara build 1.00.194
-        yang sudah diuji di device.</p>
-    </div>
-  </div>
-  <div class="meta">
-    <span class="pill" id="verBadge">v__VERSION__</span>
-    <span class="pill ghost" id="setBadge">memuat…</span>
-  </div>
-</header>
-
-<ol class="steps">
-  <li id="step1" class="active"><span>1</span> Pilih IPA</li>
-  <li id="step2"><span>2</span> Periksa</li>
-  <li id="step3"><span>3</span> Patch</li>
-</ol>
-
-<section class="card" id="cardPick">
-  <h2>Pilih IPA asli</h2>
-  <p class="hint">File tidak diunggah ke mana pun; semua proses berjalan lokal di mesin ini.</p>
-  <div class="row">
-    <input id="ipaPath" type="text" spellcheck="false" autocomplete="off"
-           placeholder="/path/ke/MONSTER_HUNTER_FREEDOM_UNITE.ipa">
-    <button class="btn" id="browseBtn">Telusuri…</button>
-    <button class="btn primary" id="inspectBtn">Periksa</button>
-  </div>
-  <div class="quick" id="quick"></div>
-  <p class="err" id="pickErr" hidden></p>
-</section>
-
-<section class="card" id="cardInfo" hidden>
-  <h2>Hasil pemeriksaan</h2>
-  <div class="grid" id="infoGrid"></div>
-  <div id="featWrap" hidden>
-    <h3>Perubahan yang akan diterapkan</h3>
-    <div class="chips" id="featChips"></div>
-  </div>
-  <p class="warn" id="infoWarn" hidden></p>
-</section>
-
-<section class="card" id="cardPatch" hidden>
-  <h2>Patch</h2>
-  <div class="row">
-    <label class="field">
-      <span>File hasil</span>
-      <input id="outPath" type="text" spellcheck="false" autocomplete="off">
-    </label>
-    <label class="field small">
-      <span>Versi baru</span>
-      <input id="version" type="text" spellcheck="false" autocomplete="off">
-    </label>
-  </div>
-  <label class="check" id="fatWrap" hidden>
-    <input type="checkbox" id="keepFat">
-    <span>Pertahankan biner FAT (default: thin arm64 — sama persis dengan build teruji)</span>
-  </label>
-  <div class="row actions">
-    <button class="btn" id="dryBtn">Dry run</button>
-    <button class="btn primary" id="patchBtn">Patch sekarang</button>
-    <button class="btn ghost" id="cancelBtn" hidden>Batalkan</button>
-  </div>
-  <p class="hint">Selesai dalam hitungan detik. IPA sumber tidak pernah diubah.</p>
-</section>
-
-<section class="card" id="cardProg" hidden>
-  <h2 id="progTitle">Memproses…</h2>
-  <div class="bar"><div class="fill" id="progFill"></div></div>
-  <div class="progline"><span id="progPhase">—</span><span id="progPct">0%</span></div>
-  <pre class="log" id="progLog"></pre>
-</section>
-
-<section class="card ok" id="cardDone" hidden>
-  <h2>✓ Selesai</h2>
-  <div class="grid" id="doneGrid"></div>
-  <div class="row actions">
-    <button class="btn" id="revealBtn">Buka folder hasil</button>
-    <button class="btn ghost" id="againBtn">Patch file lain</button>
-  </div>
-  <p class="hint">Pasang lewat AltStore / Sideloadly; installer akan menandatangani ulang IPA.</p>
-</section>
-
-<div class="modal" id="modal" hidden>
-  <div class="sheet">
-    <div class="sheet-head">
-      <button class="btn ghost" id="upBtn">↑ Naik</button>
-      <code id="browsePath">~</code>
-      <button class="btn ghost" id="closeBtn">Tutup</button>
-    </div>
-    <div class="listing" id="listing"></div>
-  </div>
-</div>
-
-<script>window.PATCHER_TOKEN = '__TOKEN__';</script>
-<script src="/app.js"></script>
-</body>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MHFU Patcher</title>
+    <script>window.PATCHER_TOKEN = '__TOKEN__';</script>
+    <script type="module" crossorigin src="/assets/index-b-DHjbsX.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CvZPeGoG.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>
