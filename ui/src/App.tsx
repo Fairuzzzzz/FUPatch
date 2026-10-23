@@ -4,89 +4,23 @@ import { AlertCircle, Check, Download, Loader2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { patchIpa } from "@/lib/engine";
+import type { RandomAccess } from "@/lib/engine";
+import { ADDITIONS, MANIFEST } from "@/lib/manifest";
 
-const TOKEN =
-  (window as unknown as { PATCHER_TOKEN?: string }).PATCHER_TOKEN ?? "";
-
-type Phase = "idle" | "uploading" | "patching" | "done" | "error";
+type Phase = "idle" | "patching" | "done" | "error";
 
 const PHASES: Record<string, string> = {
-  starting: "Starting",
   inspect: "Inspecting",
   read: "Reading binary",
+  verify: "Verifying",
   steps: "Applying patches",
   plist: "Updating Info.plist",
   write: "Writing IPA",
-  verify: "Verifying",
   done: "Done",
 };
 
-interface UploadResult {
-  ok: boolean;
-  upload: string;
-  name: string;
-  size: number;
-  version: string;
-}
-
-interface JobSnapshot {
-  id: string;
-  state: "running" | "done" | "error" | "cancelled";
-  phase: string;
-  pct: number;
-  detail: string;
-  error: string | null;
-  result: { out?: string; out_name?: string } | null;
-}
-
 const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
-
-function uploadFile(
-  file: File,
-  onProgress: (fraction: number) => void,
-): Promise<UploadResult> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload");
-    xhr.setRequestHeader("X-Patch-Token", TOKEN);
-    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
-    xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(event.loaded / event.total);
-    };
-    xhr.onload = () => {
-      let data: (UploadResult & { error?: string }) | null = null;
-      try {
-        data = JSON.parse(xhr.responseText);
-      } catch {
-        reject(new Error(`Upload failed (HTTP ${xhr.status})`));
-        return;
-      }
-      if (!data || data.ok === false) {
-        reject(new Error(data?.error ?? `Upload failed (HTTP ${xhr.status})`));
-        return;
-      }
-      resolve(data);
-    };
-    xhr.onerror = () =>
-      reject(new Error("Upload failed — is the server still running?"));
-    xhr.onabort = () => reject(new Error("Upload cancelled"));
-    xhr.send(file);
-  });
-}
-
-async function startPatch(upload: string): Promise<JobSnapshot> {
-  const res = await fetch("/api/start", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Patch-Token": TOKEN },
-    body: JSON.stringify({ upload }),
-  });
-  const data = await res.json().catch(() => null);
-  if (!data || data.ok === false) {
-    throw new Error(data?.error ?? `HTTP ${res.status}`);
-  }
-  return data.job as JobSnapshot;
-}
 
 function App() {
   const [file, setFile] = useState<File | null>(null);
@@ -95,91 +29,79 @@ function App() {
   const [detail, setDetail] = useState("");
   const [error, setError] = useState("");
   const [outName, setOutName] = useState("");
-  const [jobId, setJobId] = useState("");
+  const [outSize, setOutSize] = useState(0);
+  const [downloadUrl, setDownloadUrl] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const esRef = useRef<EventSource | null>(null);
+  const urlRef = useRef("");
 
-  useEffect(() => () => esRef.current?.close(), []);
+  const clearUrl = useCallback(() => {
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = "";
+    }
+  }, []);
+
+  useEffect(() => () => clearUrl(), [clearUrl]);
 
   const reset = useCallback(() => {
-    esRef.current?.close();
-    esRef.current = null;
+    clearUrl();
     setPhase("idle");
     setPct(0);
     setDetail("");
     setError("");
     setOutName("");
-    setJobId("");
+    setOutSize(0);
+    setDownloadUrl("");
     setFile(null);
     if (inputRef.current) inputRef.current.value = "";
-  }, []);
-
-  const watch = useCallback((job: JobSnapshot) => {
-    esRef.current?.close();
-    const es = new EventSource(
-      `/api/job/${job.id}/events?token=${encodeURIComponent(TOKEN)}`,
-    );
-    esRef.current = es;
-    es.onmessage = (event) => {
-      let data: any;
-      try {
-        data = JSON.parse(event.data);
-      } catch {
-        return;
-      }
-      if (data.done) {
-        es.close();
-        esRef.current = null;
-        const snap = data.job as JobSnapshot;
-        if (snap.state === "done") {
-          const name =
-            snap.result?.out_name ?? snap.result?.out?.split("/").pop() ?? "";
-          setOutName(name);
-          setJobId(snap.id);
-          setPct(100);
-          setDetail("");
-          setPhase("done");
-        } else {
-          setError(snap.error ?? "Patch failed");
-          setPhase("error");
-        }
-        return;
-      }
-      setPct(45 + Math.max(0, Math.min(100, data.pct ?? 0)) * 0.55);
-      const label = PHASES[data.phase] ?? data.phase ?? "";
-      setDetail(data.detail ? `${label} · ${data.detail}` : label);
-    };
-    es.onerror = () => {
-      /* the server closes the stream when the job finishes */
-    };
-  }, []);
+  }, [clearUrl]);
 
   const runPatch = useCallback(async () => {
-    if (!file || phase === "uploading" || phase === "patching") return;
-    setPhase("uploading");
-    setError("");
+    if (!file || phase === "patching") return;
+    clearUrl();
+    setPhase("patching");
     setPct(0);
-    setDetail("Uploading…");
+    setDetail("Reading IPA…");
+    setError("");
     try {
-      const uploaded = await uploadFile(file, (fraction) => {
-        setPct(fraction * 45);
-        setDetail("Uploading the IPA…");
-      });
-      setDetail("Starting…");
-      const job = await startPatch(uploaded.upload);
-      setPhase("patching");
-      setPct(45);
-      watch(job);
+      const source: RandomAccess = {
+        size: file.size,
+        read: async (offset, length) =>
+          new Uint8Array(await file.slice(offset, offset + length).arrayBuffer()),
+        slice: (offset, length) => file.slice(offset, offset + length),
+      };
+      const parts: BlobPart[] = [];
+      const result = await patchIpa(
+        source,
+        (part) => {
+          parts.push(part as BlobPart);
+        },
+        MANIFEST,
+        {
+          additions: ADDITIONS,
+          onEvent: (event) => {
+            setPct(event.pct);
+            const label = PHASES[event.phase] ?? event.phase;
+            setDetail(event.detail ? `${label} · ${event.detail}` : label);
+          },
+        },
+      );
+      const blob = new Blob(parts, { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      urlRef.current = url;
+      setDownloadUrl(url);
+      setOutName(result.outName);
+      setOutSize(result.size);
+      setPct(100);
+      setDetail("");
+      setPhase("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setPhase("error");
     }
-  }, [file, phase, watch]);
+  }, [file, phase, clearUrl]);
 
-  const busy = phase === "uploading" || phase === "patching";
-  const downloadUrl = jobId
-    ? `/api/download/${jobId}?token=${encodeURIComponent(TOKEN)}`
-    : "#";
+  const busy = phase === "patching";
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-white p-6 text-neutral-950">
@@ -197,7 +119,7 @@ function App() {
                 Patch complete
               </h1>
               <p className="mt-1.5 max-w-full break-all font-mono text-[12px] leading-relaxed text-neutral-500">
-                {outName}
+                {outName} · {mb(outSize)}
               </p>
               <div className="mt-5 flex gap-2">
                 <Button asChild data-testid="download-button">
@@ -280,7 +202,7 @@ function App() {
                 {busy ? (
                   <>
                     <Loader2 className="animate-spin" />
-                    {phase === "uploading" ? "Uploading" : "Patching"}
+                    Patching
                   </>
                 ) : (
                   "Patch"
@@ -310,8 +232,8 @@ function App() {
               )}
 
               <p className="mt-4 text-[11.5px] leading-relaxed text-neutral-400">
-                Files are processed locally and never leave this machine. The
-                original IPA is not modified.
+                Everything runs in this browser tab — the IPA is never uploaded.
+                The original file is not modified.
               </p>
             </>
           )}

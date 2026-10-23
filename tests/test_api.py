@@ -91,18 +91,21 @@ class ApiTest(unittest.TestCase):
         return done
 
     # ---------- static ----------
-    def test_index_injects_token(self):
+    def test_index_is_static(self):
         status, body = self.req('/', token=False)
         self.assertEqual(status, 200)
         self.assertNotIn(b'__TOKEN__', body)
-        self.assertIn(self.state['token'].encode(), body)
+        self.assertNotIn(self.state['token'].encode(), body)
 
     def test_static_css(self):
         import re
         _status, html = self.req('/', token=False)
-        match = re.search(rb'/assets/[^\"\']+\.css', html)
+        match = re.search(rb'(?:\./|/)assets/[^\"\']+\.css', html)
         self.assertIsNotNone(match, 'index.html does not reference built CSS')
-        status, body = self.req(match.group(0).decode(), token=False)
+        asset = match.group(0).decode()
+        if asset.startswith('./'):
+            asset = '/' + asset[2:]
+        status, body = self.req(asset, token=False)
         self.assertEqual(status, 200)
         self.assertIn(b'--background', body)
 
