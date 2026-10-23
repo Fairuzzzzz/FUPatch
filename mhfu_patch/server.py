@@ -1,285 +1,375 @@
-"""Server lokal (127.0.0.1) + API JSON + SSE untuk UI web."""
+"""Local server (127.0.0.1) — FastAPI app, upload API and SSE progress."""
+import asyncio
 import json
 import os
 import secrets
 import shutil
-import subprocess
 import threading
+import time
 import urllib.parse
 import webbrowser
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
+                               StreamingResponse)
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import APP_NAME, __version__, engine
 from . import manifest as mf
 from .jobs import JobManager
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
-MAX_BODY = 1 << 20
-MIME = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-        '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml'}
+DEFAULT_WORKDIR = os.environ.get('FUPATCH_WORKSPACE') or os.path.join(
+    os.path.expanduser('~'), '.cache', 'fupatch')
+MAX_UPLOAD = 4 << 30                 # 4 GB
+UPLOAD_TTL = 12 * 3600               # sisa upload yang telantar
+MIME = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.ico': 'image/x-icon',
+    '.woff2': 'font/woff2',
+    '.json': 'application/json; charset=utf-8',
+}
 
 
-class Handler(BaseHTTPRequestHandler):
-    state = None                     # diisi oleh serve()
-    server_version = 'MHFUPatcher/' + __version__
+def _sweep(root, keep=2):
+    """Buang job lama dan upload yang telantar supaya disk tidak penuh."""
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return
+    jobs = []
+    for name in names:
+        path = os.path.join(root, name)
+        if name.startswith('job-') and os.path.isdir(path):
+            jobs.append(path)
+        elif name.startswith('upload-') and name.endswith('.ipa'):
+            try:
+                if time.time() - os.path.getmtime(path) > UPLOAD_TTL:
+                    os.remove(path)
+            except OSError:
+                pass
+    jobs.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    for old in jobs[keep:]:
+        shutil.rmtree(old, ignore_errors=True)
+
+
+def make_app(patch_dir=None, workdir=None):
+    app = FastAPI(title=APP_NAME, version=__version__,
+                  docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.token = secrets.token_urlsafe(18)
+    app.state.jobs = JobManager()
+    app.state.patch_dir = patch_dir
+    app.state.workdir = os.path.abspath(
+        os.path.expanduser(workdir or DEFAULT_WORKDIR))
+    app.state.uploads = {}
+    os.makedirs(app.state.workdir, exist_ok=True)
 
     # ---------- util ----------
-    def log_message(self, fmt, *args):      # tenang: jangan banjiri terminal
-        pass
+    def fail(code, message):
+        raise StarletteHTTPException(code, message)
 
-    def _send(self, code, body, ctype='application/json; charset=utf-8'):
-        if isinstance(body, str):
-            body = body.encode('utf-8')
-        self.send_response(code)
-        self.send_header('Content-Type', ctype)
-        self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(body)
+    def require_token(request: Request, token=None):
+        given = request.headers.get('x-patch-token') or token
+        if not given or not secrets.compare_digest(given, app.state.token):
+            fail(403, 'invalid token')
 
-    def _json(self, obj, code=200):
-        self._send(code, json.dumps(obj, ensure_ascii=False))
+    @app.middleware('http')
+    async def host_guard(request: Request, call_next):
+        host = (request.headers.get('host') or '').split(':')[0].strip('[]')
+        if host and host not in ('127.0.0.1', 'localhost', '::1'):
+            return JSONResponse({'ok': False, 'error': 'host not allowed'},
+                                status_code=403)
+        return await call_next(request)
 
-    def _error(self, message, code=400):
-        self._json({'ok': False, 'error': message}, code)
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(_request, exc):
+        return JSONResponse({'ok': False, 'error': str(exc.detail)},
+                            status_code=exc.status_code)
 
-    def _body(self):
-        length = int(self.headers.get('Content-Length') or 0)
-        if length > MAX_BODY:
-            raise ValueError('body terlalu besar')
-        raw = self.rfile.read(length) if length else b'{}'
-        return json.loads(raw.decode('utf-8') or '{}')
+    @app.exception_handler(Exception)
+    async def internal_error(_request, exc):
+        return JSONResponse(
+            {'ok': False, 'error': '%s: %s' % (exc.__class__.__name__, exc)},
+            status_code=500)
 
-    def _token_ok(self, query=None):
-        token = self.state['token']
-        given = self.headers.get('X-Patch-Token')
-        if not given and query:
-            given = query
-        return secrets.compare_digest(given or '', token)
+    # ---------- pages ----------
+    @app.get('/favicon.ico')
+    async def favicon():
+        return JSONResponse({'ok': True}, status_code=204)
 
-    def _host_ok(self):
-        host = (self.headers.get('Host') or '').split(':')[0]
-        return host in ('127.0.0.1', 'localhost', '')
-
-    # ---------- GET ----------
-    def do_GET(self):                      # noqa: N802
-        try:
-            parsed = urllib.parse.urlparse(self.path)
-            path = parsed.path
-            if path == '/':
-                return self._static('index.html')
-            if path in ('/app.js', '/style.css'):
-                return self._static(path[1:])
-            if path == '/favicon.ico':
-                return self._send(204, b'', 'image/x-icon')
-            if not self._host_ok():
-                return self._error('host tidak diizinkan', 403)
-            if path == '/api/hello':
-                if not self._token_ok(parsed.query and urllib.parse.parse_qs(parsed.query).get('token', [None])[0]):
-                    return self._error('token tidak valid', 403)
-                idx = mf.load_index(self.state['patch_dir'])
-                return self._json({
-                    'ok': True, 'app': APP_NAME, 'version': __version__,
-                    'default': idx.get('default'),
-                    'patch_sets': idx.get('sets', []),
-                    'home': os.path.expanduser('~'),
-                })
-            if path.startswith('/api/job/'):
-                return self._job_get(path, parsed)
-            return self._error('tidak ditemukan', 404)
-        except Exception as exc:           # noqa: BLE001
-            return self._error('%s: %s' % (exc.__class__.__name__, exc), 500)
-
-    def _static(self, name):
-        path = os.path.join(WEB_DIR, name)
+    @app.get('/')
+    async def index():
+        path = os.path.join(WEB_DIR, 'index.html')
         if not os.path.isfile(path):
-            return self._error('aset tidak ada', 404)
-        ext = os.path.splitext(name)[1]
-        with open(path, 'rb') as fh:
-            body = fh.read()
-        if name == 'index.html':
-            body = (body.replace(b'__TOKEN__', self.state['token'].encode())
-                        .replace(b'__VERSION__', __version__.encode()))
-        self._send(200, body, MIME.get(ext, 'application/octet-stream'))
+            fail(500, 'UI build not found — run the build in ui/ first')
+        with open(path, encoding='utf-8') as fh:
+            html = fh.read().replace('__TOKEN__', app.state.token)
+        return HTMLResponse(html, headers={'Cache-Control': 'no-store'})
 
-    def _job_get(self, path, parsed):
-        parts = path.strip('/').split('/')     # api/job/<id>[/events]
-        if len(parts) < 3:
-            return self._error('job tidak valid', 404)
-        job = self.state['jobs'].get(parts[2])
-        if not job:
-            return self._error('job tidak ditemukan', 404)
-        if len(parts) == 3:
-            if not self._token_ok(self.headers.get('X-Patch-Token')):
-                return self._error('token tidak valid', 403)
-            return self._json({'ok': True, 'job': job.snapshot()})
-        if parts[3] != 'events':
-            return self._error('tidak ditemukan', 404)
-        token = urllib.parse.parse_qs(parsed.query).get('token', [None])[0]
-        if not self._token_ok(token):
-            return self._error('token tidak valid', 403)
-        return self._stream(job)
+    @app.get('/assets/{name:path}')
+    async def asset(name: str):
+        root = os.path.abspath(os.path.join(WEB_DIR, 'assets'))
+        path = os.path.abspath(os.path.join(root, name))
+        if not path.startswith(root + os.sep) or not os.path.isfile(path):
+            fail(404, 'asset not found')
+        ext = os.path.splitext(path)[1].lower()
+        return FileResponse(
+            path, media_type=MIME.get(ext, 'application/octet-stream'),
+            headers={'Cache-Control': 'public, max-age=31536000, immutable'})
 
-    def _stream(self, job):
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
-        self.send_header('Cache-Control', 'no-store')
-        self.send_header('Connection', 'close')
-        self.end_headers()
-        sent = 0
-        try:
-            while True:
-                with job.cond:
-                    if len(job.events) <= sent and job.state == 'running':
-                        job.cond.wait(timeout=5)
-                    events = job.events[sent:]
-                    sent += len(events)
-                    state = job.state
-                    snap = job.snapshot()
-                for event in events:
-                    self.wfile.write(('data: %s\n\n' % json.dumps(event)).encode())
-                if state != 'running':
-                    self.wfile.write(('data: %s\n\n' % json.dumps(
-                        {'done': True, 'job': snap})).encode())
-                    self.wfile.flush()
-                    return
-                self.wfile.write(b': ping\n\n')
-                self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):
-            return
+    # ---------- API ----------
+    @app.get('/api/hello')
+    async def hello(request: Request, token: str = ''):
+        require_token(request, token)
+        idx = mf.load_index(app.state.patch_dir)
+        return {'ok': True, 'app': APP_NAME, 'version': __version__,
+                'default': idx.get('default'),
+                'patch_sets': idx.get('sets', []),
+                'workdir': app.state.workdir}
 
-    # ---------- POST ----------
-    def do_POST(self):                     # noqa: N802
-        try:
-            if not self._host_ok():
-                return self._error('host tidak diizinkan', 403)
-            if not self._token_ok(self.headers.get('X-Patch-Token')):
-                return self._error('token tidak valid', 403)
-            path = urllib.parse.urlparse(self.path).path
-            body = self._body()
-            if path == '/api/list':
-                return self._api_list(body)
-            if path == '/api/inspect':
-                return self._api_inspect(body)
-            if path == '/api/start':
-                return self._api_start(body)
-            if path == '/api/cancel':
-                return self._api_cancel(body)
-            if path == '/api/reveal':
-                return self._api_reveal(body)
-            return self._error('tidak ditemukan', 404)
-        except engine.PatchError as exc:
-            return self._error(str(exc), 400)
-        except Exception as exc:           # noqa: BLE001
-            return self._error('%s: %s' % (exc.__class__.__name__, exc), 500)
-
-    def _api_list(self, body):
-        path = os.path.abspath(os.path.expanduser(body.get('path') or '~'))
-        if not os.path.isdir(path):
-            return self._error('folder tidak ada: %s' % path)
-        dirs, files = [], []
-        try:
-            with os.scandir(path) as it:
-                for entry in it:
-                    if entry.name.startswith('.'):
-                        continue
-                    try:
-                        if entry.is_dir():
-                            dirs.append(entry.name)
-                        elif entry.name.lower().endswith('.ipa'):
-                            st = entry.stat()
-                            files.append({'name': entry.name, 'size': st.st_size})
-                    except OSError:
-                        continue
-        except PermissionError:
-            return self._error('tidak boleh membaca folder ini', 403)
-        dirs.sort(key=str.lower)
-        files.sort(key=lambda f: f['name'].lower())
-        return self._json({'ok': True, 'path': path,
-                           'parent': os.path.dirname(path) if path != '/' else None,
-                           'dirs': dirs, 'files': files})
-
-    def _api_inspect(self, body):
+    @app.post('/api/inspect')
+    async def api_inspect(request: Request):
+        require_token(request)
+        body = await request.json()
         ipa = body.get('ipa')
         if not ipa:
-            return self._error('ipa wajib diisi')
-        info = engine.look(os.path.expanduser(ipa),
-                           patch_set=body.get('patch_set'),
-                           directory=self.state['patch_dir'])
-        folder = os.path.dirname(os.path.abspath(os.path.expanduser(ipa)))
+            fail(400, 'ipa is required')
         try:
-            free = shutil.disk_usage(folder).free
-        except OSError:
-            free = None
-        info['free_space'] = free
+            info = await asyncio.to_thread(
+                engine.look, os.path.expanduser(ipa), body.get('patch_set'),
+                app.state.patch_dir)
+        except engine.PatchError as exc:
+            fail(400, str(exc))
+        version = engine.suggest_version(info)
+        info['suggest'] = {'version': version,
+                           'out': engine.suggest_output(info['ipa'], version)}
         info['patches_ok'] = info['supported'] and not info['cryptid']
-        return self._json({'ok': True, 'info': info})
+        return {'ok': True, 'info': info}
 
-    def _api_start(self, body):
-        ipa = os.path.expanduser(body.get('ipa') or '')
-        out = os.path.expanduser(body.get('out') or '')
-        if not ipa or not out:
-            return self._error('ipa dan out wajib diisi')
-        version = body.get('version') or None
-        keep_fat = bool(body.get('keep_fat'))
-        dry_run = bool(body.get('dry_run'))
-        force = bool(body.get('force'))
-        patch_set = body.get('patch_set') or None
-        directory = self.state['patch_dir']
+    @app.post('/api/upload')
+    async def api_upload(request: Request):
+        require_token(request)
+        length = int(request.headers.get('content-length') or 0)
+        if length <= 0:
+            fail(400, 'empty upload')
+        if length > MAX_UPLOAD:
+            fail(413, 'file too large (max 4 GB)')
+        name = urllib.parse.unquote(
+            request.headers.get('x-filename') or 'input.ipa')
+        root = app.state.workdir
+        _sweep(root)
+        token = secrets.token_hex(8)
+        dest = os.path.join(root, 'upload-%s.ipa' % token)
+        received = 0
+        try:
+            with open(dest, 'wb') as fh:
+                async for chunk in request.stream():
+                    if not chunk:
+                        continue
+                    received += len(chunk)
+                    if received > MAX_UPLOAD:
+                        raise StarletteHTTPException(413, 'file too large')
+                    await asyncio.to_thread(fh.write, chunk)
+        except BaseException:
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+            raise
+        if received != length:
+            os.remove(dest)
+            fail(400, 'upload incomplete')
+        try:
+            info = await asyncio.to_thread(
+                engine.look, dest, None, app.state.patch_dir)
+        except Exception as exc:            # noqa: BLE001 - input pengguna
+            os.remove(dest)
+            fail(400, 'not a readable IPA: %s' % exc)
+        if not info['supported']:
+            os.remove(dest)
+            fail(400, info['reason'] or 'unsupported IPA')
+        version = engine.suggest_version(info)
+        job_dir = os.path.join(root, 'job-' + token)
+        os.makedirs(job_dir, exist_ok=True)
+        app.state.uploads[token] = {
+            'path': dest,
+            'name': name,
+            'out': os.path.join(job_dir, 'MHFU_patched_%s.ipa' % version),
+            'version': version,
+            'dir': job_dir,
+        }
+        return {'ok': True, 'upload': token, 'name': name, 'size': received,
+                'version': version, 'app': info.get('app_name')}
+
+    @app.post('/api/start')
+    async def api_start(request: Request):
+        require_token(request)
+        body = await request.json()
+        upload = body.get('upload')
+        entry = app.state.uploads.get(upload) if upload else None
+        if not entry:
+            fail(404, 'upload expired, choose the file again')
 
         def run(job):
-            return engine.patch(ipa, out, version=version, keep_fat=keep_fat,
-                                dry_run=dry_run, on_event=job.emit,
-                                is_cancelled=lambda: job.cancel,
-                                directory=directory, patch_set=patch_set,
-                                force=force)
+            try:
+                report = engine.patch(
+                    entry['path'], entry['out'], version=entry['version'],
+                    on_event=job.emit, is_cancelled=lambda: job.cancel,
+                    directory=app.state.patch_dir, force=True)
+                report['out_name'] = os.path.basename(report.get('out') or '')
+                return report
+            finally:
+                app.state.uploads.pop(upload, None)
+                try:
+                    os.remove(entry['path'])
+                except OSError:
+                    pass
 
-        job = self.state['jobs'].start(run)
-        return self._json({'ok': True, 'job': job.snapshot()})
+        job = app.state.jobs.start(run)
+        return {'ok': True, 'job': job.snapshot()}
 
-    def _api_cancel(self, body):
+    @app.post('/api/cancel')
+    async def api_cancel(request: Request):
+        require_token(request)
+        body = await request.json()
         job_id = body.get('job')
-        job = self.state['jobs'].get(job_id) if job_id else self.state['jobs'].active_job()
+        job = app.state.jobs.get(job_id) if job_id else None
         if not job:
-            return self._error('job tidak ditemukan', 404)
+            job = app.state.jobs.active_job()
+        if not job:
+            fail(404, 'job not found')
         job.cancel = True
         with job.cond:
             job.cond.notify_all()
-        return self._json({'ok': True})
+        return {'ok': True}
 
-    def _api_reveal(self, body):
-        path = body.get('path')
-        last = self.state['jobs'].last_output
-        if not path or not last:
-            return self._error('belum ada hasil')
-        path = os.path.abspath(os.path.expanduser(path))
-        if os.path.abspath(last) != path:
-            return self._error('hanya folder hasil terakhir yang boleh dibuka', 403)
-        subprocess.Popen(['xdg-open', os.path.dirname(path)],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return self._json({'ok': True})
+    @app.get('/api/job/{job_id}')
+    async def api_job(job_id: str, request: Request):
+        require_token(request)
+        job = app.state.jobs.get(job_id)
+        if not job:
+            fail(404, 'job not found')
+        return {'ok': True, 'job': job.snapshot()}
+
+    @app.get('/api/job/{job_id}/events')
+    async def api_job_events(job_id: str, request: Request, token: str = ''):
+        require_token(request, token)
+        job = app.state.jobs.get(job_id)
+        if not job:
+            fail(404, 'job not found')
+
+        async def stream():
+            sent = 0
+            while True:
+                events = job.events[sent:]
+                sent += len(events)
+                for event in events:
+                    yield 'data: %s\n\n' % json.dumps(event)
+                if job.state != 'running':
+                    snap = job.snapshot()
+                    yield 'data: %s\n\n' % json.dumps(
+                        {'done': True, 'job': snap})
+                    return
+                if not events:
+                    yield ': ping\n\n'
+                await asyncio.sleep(0.1)
+
+        return StreamingResponse(
+            stream(), media_type='text/event-stream',
+            headers={'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no'})
+
+    @app.get('/api/download/{job_id}')
+    async def api_download(job_id: str, request: Request, token: str = ''):
+        require_token(request, token)
+        job = app.state.jobs.get(job_id)
+        if not job:
+            fail(404, 'job not found')
+        snap = job.snapshot()
+        out = (snap.get('result') or {}).get('out') if snap['state'] == 'done' else None
+        if not out:
+            fail(404, 'result is not ready')
+        path = os.path.abspath(out)
+        root = os.path.abspath(app.state.workdir)
+        if not path.startswith(root + os.sep) or not os.path.isfile(path):
+            fail(404, 'result file not found')
+        return FileResponse(path, media_type='application/octet-stream',
+                            filename=os.path.basename(path),
+                            headers={'Cache-Control': 'no-store'})
+
+    @app.api_route('/api/{rest:path}',
+                   methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+    async def api_not_found(rest: str):
+        fail(404, 'not found')
+
+    # ---------- static (SPA) ----------
+    @app.get('/{path:path}')
+    async def static_file(path: str):
+        if path.startswith('api/'):
+            fail(404, 'not found')
+        root = os.path.abspath(WEB_DIR)
+        target = os.path.abspath(os.path.join(root, urllib.parse.unquote(path)))
+        if not target.startswith(root + os.sep) or not os.path.isfile(target):
+            fail(404, 'not found')
+        ext = os.path.splitext(target)[1].lower()
+        return FileResponse(target, media_type=MIME.get(
+            ext, 'application/octet-stream'))
+
+    return app
 
 
-def make_server(host='127.0.0.1', port=0, patch_dir=None):
-    Handler.state = {'token': secrets.token_urlsafe(18),
-                     'jobs': JobManager(),
-                     'patch_dir': patch_dir}
-    httpd = ThreadingHTTPServer((host, port), Handler)
-    return httpd, Handler.state
+class ServerHandle:
+    """Small wrapper so tests can start/stop the server easily."""
+
+    def __init__(self, server, app, thread):
+        self.server = server
+        self.app = app
+        self.thread = thread
+        self.server_address = server.servers[0].sockets[0].getsockname()
+        self.state = {
+            'token': app.state.token,
+            'jobs': app.state.jobs,
+            'patch_dir': app.state.patch_dir,
+            'workdir': app.state.workdir,
+            'uploads': app.state.uploads,
+            'app': app,
+        }
+
+    def shutdown(self):
+        self.server.should_exit = True
+        self.thread.join(timeout=10)
+
+    def server_close(self):
+        pass
 
 
-def serve(host='127.0.0.1', port=8765, open_browser=False, patch_dir=None):
-    httpd, _state = make_server(host, port, patch_dir)
+def make_server(host='127.0.0.1', port=0, patch_dir=None, workdir=None):
+    app = make_app(patch_dir=patch_dir, workdir=workdir)
+    config = uvicorn.Config(app, host=host, port=port, log_level='warning')
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    deadline = time.time() + 15
+    while not server.started:
+        if time.time() > deadline:
+            raise RuntimeError('server did not start')
+        time.sleep(0.02)
+    return ServerHandle(server, app, thread), app.state
+
+
+def serve(host='127.0.0.1', port=8765, open_browser=False, patch_dir=None,
+          workdir=None):
+    app = make_app(patch_dir=patch_dir, workdir=workdir)
     shown = '127.0.0.1' if host in ('0.0.0.0', '') else host
     url = 'http://%s:%d/' % (shown, port)
     print('%s %s' % (APP_NAME, __version__))
-    print('buka di browser: %s' % url)
-    print('tekan Ctrl+C untuk berhenti')
+    print('open in browser: %s' % url)
+    print('workspace: %s' % app.state.workdir)
+    print('press Ctrl+C to stop')
     if open_browser:
-        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print('\nberhenti.')
-    finally:
-        httpd.server_close()
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+    uvicorn.run(app, host=host, port=port, log_level='warning')

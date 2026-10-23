@@ -5,8 +5,16 @@ import os
 import sys
 
 from . import APP_NAME, __version__, engine
-from . import manifest as mf
-from . import server
+
+PHASES = {
+    'inspect': 'inspecting',
+    'read': 'reading',
+    'steps': 'patching',
+    'plist': 'info.plist',
+    'write': 'writing',
+    'verify': 'verifying',
+    'done': 'done',
+}
 
 
 def _mb(n):
@@ -20,34 +28,34 @@ def cmd_inspect(args):
         print(json.dumps(info, indent=2, ensure_ascii=False))
         return 0 if info['supported'] else 2
     print('%s %s' % (APP_NAME, __version__))
-    print('IPA        : %s (%.1f MB, %d member)'
+    print('IPA        : %s (%.1f MB, %d files)'
           % (info['ipa'], _mb(info['size']), info['members']))
-    print('App        : %s (%s) versi %s'
+    print('App        : %s (%s) version %s'
           % (info['app_name'], info['bundle_id'], info['info_version']))
-    print('Biner      : %s, %d slice' % (info['exe_kind'], len(info['slices'])))
+    print('Binary     : %s, %d slice(s)' % (info['exe_kind'], len(info['slices'])))
     for sl in info['slices']:
-        flag = ' (terenkripsi)' if sl['encrypted'] else ''
+        flag = ' (encrypted)' if sl['encrypted'] else ''
         print('  - %-7s %8.1f MB  sha256 %s%s'
               % (sl['arch'], _mb(sl['size']), sl['sha256'][:16], flag))
     if info['supported']:
         print('Patch set  : %s — %s'
               % (info['patch_set'], info['patch_title']))
-        print('Langkah    : %d total, %d belum, %d sudah'
+        print('Steps      : %d total, %d pending, %d applied'
               % (info['steps_total'], info['steps_pending'],
                  info['steps_applied']))
         if info['remove_pending']:
-            print('Hapus      : %d member' % len(info['remove_pending']))
+            print('Remove     : %d files' % len(info['remove_pending']))
         if info['add_pending']:
-            print('Tambah     : %s' % ', '.join(info['add_pending']))
+            print('Add        : %s' % ', '.join(info['add_pending']))
         if (not info['steps_pending'] and not info['remove_pending']
                 and not info['add_pending']):
-            print('Status     : sudah dipatch lengkap '
-                  '(ganti nomor versi untuk membangun ulang)')
+            print('Status     : already fully patched '
+                  '(change the version to rebuild)')
         else:
-            print('Status     : siap dipatch')
+            print('Status     : ready to patch')
         return 0
-    print('Status     : TIDAK DIDUKUNG')
-    print('  %s' % (info['reason'] or 'alasan tidak diketahui'))
+    print('Status     : NOT SUPPORTED')
+    print('  %s' % (info['reason'] or 'unknown reason'))
     return 2
 
 
@@ -57,13 +65,14 @@ def cmd_patch(args):
     state = {'phase': None, 'pct': -10}
 
     def on_event(ev):
-        phase, pct = ev.get('phase'), ev.get('pct', 0)
+        phase = PHASES.get(ev.get('phase', ''), ev.get('phase', ''))
+        pct = ev.get('pct', 0)
         if phase == state['phase'] and pct - state['pct'] < 5:
             return
         state['phase'] = phase
         state['pct'] = pct
         detail = ev.get('detail') or ''
-        sys.stdout.write('\r[%3d%%] %-14s %-58s' % (pct, phase, detail[:58]))
+        sys.stdout.write('\r[%3d%%] %-12s %-60s' % (pct, phase, detail[:60]))
         sys.stdout.flush()
 
     try:
@@ -72,39 +81,45 @@ def cmd_patch(args):
                               on_event=on_event, directory=args.patches,
                               patch_set=args.patch_set, force=args.force)
     except engine.StepMismatch as exc:
-        print('\nGAGAL: %s' % exc, file=sys.stderr)
+        print('\nFAILED: %s' % exc, file=sys.stderr)
         return 3
     except engine.PatchError as exc:
-        print('\nGAGAL: %s' % exc, file=sys.stderr)
-        return 4 if 'ruang disk' in str(exc) else 2
+        print('\nFAILED: %s' % exc, file=sys.stderr)
+        return 4 if 'disk space' in str(exc) else 2
     print()
     if report.get('dry_run'):
-        print('DRY RUN — tidak ada file ditulis')
-        print('  versi    : %s -> %s' % (report['old_version'], report['version']))
-        print('  langkah  : %d diterapkan, %d dilewati'
+        print('DRY RUN — no file written')
+        print('  version : %s -> %s' % (report['old_version'], report['version']))
+        print('  steps   : %d applied, %d skipped'
               % (len(report['applied']), len(report['skipped'])))
-        print('  hapus    : %d member' % len(report['removed']))
-        print('  tambah   : %s' % (', '.join(report['added']) or '-'))
-        print('  member   : %d' % report['members'])
+        print('  package : %d removed, %d added'
+              % (len(report['removed']), len(report['added'])))
+        print('  files   : %d' % report['members'])
         return 0
-    print('SELESAI dalam %.1f s' % report['duration'])
-    print('  hasil    : %s (%.1f MB, %d member)'
+    print('DONE in %.1f s' % report['duration'])
+    print('  output  : %s (%.1f MB, %d files)'
           % (report['out'], _mb(report['size']), report['members']))
-    print('  versi    : %s -> %s' % (report['old_version'], report['version']))
-    print('  biner    : %s, sha slice %s'
+    print('  version : %s -> %s' % (report['old_version'], report['version']))
+    print('  binary  : %s, slice sha %s'
           % (report['exe_kind_out'], report['slice_sha256']))
-    print('  langkah  : %d diterapkan, %d dilewati'
+    print('  steps   : %d applied, %d skipped'
           % (len(report['applied']), len(report['skipped'])))
-    print('  paket    : %d member dihapus, %d ditambah'
+    print('  package : %d removed, %d added'
           % (len(report['removed']), len(report['added'])))
-    print('  sha IPA  : %s' % report.get('output_sha256', ''))
-    print('\nPasang lewat AltStore/Sideloadly (akan ditandatangani ulang).')
+    print('  sha256  : %s' % report.get('output_sha256', ''))
+    print('\nInstall with AltStore/Sideloadly (it will re-sign the IPA).')
     return 0
 
 
 def cmd_serve(args):
+    try:
+        from . import server
+    except ImportError:
+        print('the web server needs FastAPI/uvicorn — run ./run.sh, '
+              'it creates .venv automatically', file=sys.stderr)
+        return 2
     server.serve(host=args.host, port=args.port, open_browser=args.open,
-                 patch_dir=args.patches)
+                 patch_dir=args.patches, workdir=args.workdir)
     return 0
 
 
@@ -112,30 +127,31 @@ def build_parser():
     ap = argparse.ArgumentParser(prog='mhfu_patch', description=APP_NAME)
     ap.add_argument('--version-info', action='version',
                     version='%s %s' % (APP_NAME, __version__))
-    ap.add_argument('--patches', help='folder patch set (default: patches/)')
+    ap.add_argument('--patches', help='patch-set folder (default: patches/)')
     sub = ap.add_subparsers(dest='cmd', required=True)
 
-    p = sub.add_parser('inspect', help='periksa IPA tanpa mengubah')
+    p = sub.add_parser('inspect', help='inspect an IPA without modifying it')
     p.add_argument('--ipa', required=True)
     p.add_argument('--patch-set')
     p.add_argument('--json', action='store_true')
     p.set_defaults(func=cmd_inspect)
 
-    p = sub.add_parser('patch', help='patch IPA')
+    p = sub.add_parser('patch', help='patch an IPA')
     p.add_argument('--ipa', required=True)
     p.add_argument('--out', required=True)
-    p.add_argument('--version', help='versi baru (default: dari patch set)')
+    p.add_argument('--version', help='new version (default: from patch set)')
     p.add_argument('--keep-fat', action='store_true',
-                   help='pertahankan biner FAT (default: thin arm64)')
+                   help='keep the FAT binary (default: thin arm64)')
     p.add_argument('--dry-run', action='store_true')
-    p.add_argument('--force', action='store_true', help='timpa file keluaran')
+    p.add_argument('--force', action='store_true', help='overwrite the output file')
     p.add_argument('--patch-set')
     p.set_defaults(func=cmd_patch)
 
-    p = sub.add_parser('serve', help='jalankan UI web lokal')
+    p = sub.add_parser('serve', help='run the local web UI')
     p.add_argument('--port', type=int, default=8765)
     p.add_argument('--host', default='127.0.0.1')
     p.add_argument('--open', action='store_true')
+    p.add_argument('--workdir', help='folder for uploaded/output files')
     p.set_defaults(func=cmd_serve)
     return ap
 
