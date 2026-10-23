@@ -7,3 +7,6 @@ __pycache__/
 # dependensi build UI (hasil build tetap di-commit di mhfu_patch/web)
 ui/node_modules/
 ui/.vite/
+ui/dist/
+ui/tsconfig.tsbuildinfo
+.venv/
