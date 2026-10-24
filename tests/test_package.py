@@ -59,6 +59,8 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(out['CFBundleVersion'], '1.00.200')
         self.assertEqual(out['UIDeviceFamily'], [1])
         self.assertEqual(out['UILaunchStoryboardName'], 'LaunchScreen')
+        self.assertIs(out['UIFileSharingEnabled'], True)
+        self.assertIs(out['LSSupportsOpeningDocumentsInPlace'], True)
         self.assertNotIn('UILaunchImageFile', out)
         self.assertEqual(out['Extra'], 'tetap')
         self.assertEqual(out['MHFUPatch'], self.m['id'] + ' 2026-10-22')

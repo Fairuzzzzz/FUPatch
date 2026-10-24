@@ -329,7 +329,9 @@
       "NSBluetoothPeripheralUsageDescription": "MHFU uses Bluetooth to connect a wireless MFi game controller.",
       "UIDeviceFamily": [
         1
-      ]
+      ],
+      "UIFileSharingEnabled": true,
+      "LSSupportsOpeningDocumentsInPlace": true
     },
     "remove": [
       "UILaunchImageFile"

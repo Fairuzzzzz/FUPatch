@@ -22,7 +22,9 @@ included for automation.
 
 - binary becomes **thin arm64** (8,593,744 B)
 - `Info.plist`: `UIDeviceFamily = [1]`, `UILaunchStoryboardName`,
-  2 Bluetooth permission keys (MFi controller), patch marker
+  2 Bluetooth permission keys (MFi controller), `UIFileSharingEnabled` and
+  `LSSupportsOpeningDocumentsInPlace` (save data visible in the Files app),
+  patch marker
 - 11 old members removed (`LaunchImage*`, `_CodeSignature/*`, `iTunesArtwork`,
   `iTunesMetadata.plist`, `.ZipComment`)
 - 1 member added (`LaunchScreen.storyboard`)
@@ -122,6 +124,11 @@ The output IPA is unsigned. Install it with **AltStore**, **Sideloadly**, or a
 similar tool — the installer re-signs it with your Apple ID. The app keeps its
 source version unless you pass `--version`; the version shown in Settings is
 whatever was written to `Info.plist`.
+
+The patch enables Documents file sharing, so on current iOS the app's data
+container appears in the Files app as **MH Unite**. The game keeps its original
+save path (`Documents/savedata` and `Documents/_savedata`); the patch does not
+move or rewrite save data.
 
 ## Verification
 

@@ -41,6 +41,8 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(changes['set']['UIDeviceFamily'], [1])
         self.assertEqual(changes['set']['UILaunchStoryboardName'], 'LaunchScreen')
         self.assertIn('NSBluetoothAlwaysUsageDescription', changes['set'])
+        self.assertIs(changes['set']['UIFileSharingEnabled'], True)
+        self.assertIs(changes['set']['LSSupportsOpeningDocumentsInPlace'], True)
 
     def test_classify(self):
         self.assertEqual(manifest.classify(self.m, RESULT_SHA), 'result')
