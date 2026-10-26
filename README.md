@@ -18,7 +18,9 @@ included for automation.
 | Loading text/background & map            | 5 byte ranges  |
 | Coating frame aligned with the bar (A/B) | 4 byte ranges  |
 
-**36 ranges / 1,008 bytes** total in the `arm64` slice, plus package changes:
+**36 ranges / 1,008 bytes** in the base `arm64` patch, plus package changes.
+The iPhone 11 / XR profile adds three null-guard ranges (39 total); the other
+profiles only override the safe-area and UI-scale constants.
 
 - binary becomes **thin arm64** (8,593,744 B)
 - `Info.plist`: `UIDeviceFamily = [1]`, `UILaunchStoryboardName`,
@@ -64,8 +66,9 @@ cd ui && npm run dev
 Single-card UI (React + shadcn/ui, black & white, English copy):
 
 1. click **Choose IPA** and pick the original IPA in the file dialog
-2. click **Patch**
-3. when it finishes you get **Patch complete** and a **Download IPA** button
+2. choose the **iPhone model** profile that matches the device
+3. click **Patch**
+4. when it finishes you get **Patch complete** and a **Download IPA** button
 
 There is no path input and no upload. The browser reads the file with the File
 API, applies the patch, and offers the result as `MHFU_patched.ipa`
@@ -85,14 +88,42 @@ Notes:
 - The build uses relative asset paths, so it also runs under a subpath
   (GitHub Pages, etc.).
 
+## Device profiles
+
+The selector uses one shared manifest and changes only the safe-area constants
+and UI scale (the iPhone 11 / XR profile also adds a small null-resource guard).
+Analog, buttons, coating and the launch storyboard stay shared until they have
+been tested on hardware.
+
+| profile id | models | safe area (px) | uiScale | status |
+| --- | --- | --- | --- | --- |
+| `iphone11-xr` | iPhone 11, XR | 88 / 88 / 0 / 42 | 1.0 | 2x; crash guard; needs device test |
+| `iphone11-pro` | iPhone 11 Pro / Pro Max | 132 / 132 / 0 / 63 | 1.6 | 3x, 44 pt; needs device test |
+| `iphone12-14` | iPhone 12 / 13 / 14, incl. mini, 14 Plus, 12/13 Pro Max | 141 / 141 / 0 / 63 | 1.6 | default; 3x, 47 pt |
+| `iphone14pro-15` | iPhone 14 Pro, 15 | 177 / 177 / 0 / 63 | 1.6 | 3x, 59 pt; needs device test |
+| `iphone14-15-promax` | iPhone 14 Pro Max, 15 Plus, 15 Pro Max | 177 / 177 / 0 / 63 | 1.764 | 3x, 59 pt; needs device test |
+| `iphone16-17` | iPhone 16 / 17 (generic) | 177 / 177 / 0 / 63 | 1.6 | fallback, not per-model |
+
+The **iPhone 12 / 13 / 14** profile is the default and is binary-identical to
+the original patch. The other profiles are experimental until a device test
+confirms the HUD and safe area. The iPhone 16 / 17 button is deliberately a
+generic fallback; the 16 Pro / 17 Pro / 17 Air dimensions have not been measured.
+
 ## Using the CLI
 
 ```bash
 # inspect only
 python3 -m mhfu_patch inspect --ipa original.ipa
 
+# inspect with a device profile
+python3 -m mhfu_patch inspect --ipa original.ipa --profile iphone11-xr
+
 # patch (keeps the source app version)
 python3 -m mhfu_patch patch --ipa original.ipa --out MHFU_patched.ipa
+
+# patch for a specific device profile
+python3 -m mhfu_patch patch --ipa original.ipa --out MHFU_patched.ipa \
+    --profile iphone11-xr
 
 # optional: give a test build its own version
 python3 -m mhfu_patch patch --ipa original.ipa --out MHFU_patched.ipa \
@@ -107,7 +138,7 @@ python3 -m mhfu_patch patch --ipa original.ipa --out /tmp/x.ipa --dry-run
 
 `patch` options: `--version` (override the app version; by default the source
 version is kept), `--keep-fat` (keep the FAT binary), `--force` (overwrite the
-output), `--patch-set ID`.
+output), `--patch-set ID`, `--profile ID` (defaults to `iphone12-14`).
 
 The suggested output name is `MHFU_patched.ipa`; if it already exists the CLI
 uses `MHFU_patched-2.ipa`, `MHFU_patched-3.ipa`, and so on.
@@ -135,8 +166,9 @@ move or rewrite save data.
 The patcher verifies itself before writing the output:
 
 1. the input arm64 slice sha256 must be a known source or intermediate binary
-2. each of the 36 steps must match its expected bytes (or already be applied)
-3. the patched slice sha256 **must** equal
+2. every base and profile step must match its expected bytes (or already be applied)
+3. the patched slice sha256 **must** equal the selected profile's result sha;
+   the default `iphone12-14` result is
    `25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4`
 
 The CLI additionally re-reads the executable and version from the written IPA.
@@ -197,8 +229,11 @@ except `Info.plist`, identical executable sha256, identical plist keys.
 ## Limitations
 
 - Only works for IPAs whose decrypted arm64 binary sha matches the manifest.
-- The patch is all-or-nothing (all 36 steps); per-feature toggles are not
-  available because several code caves are shared between features.
+- The patch is all-or-nothing (base steps plus the selected profile); per-feature
+  toggles are not available because several code caves are shared between
+  features.
+- Non-default profiles are experimental; the storyboard and coating frame are
+  shared until they have been measured on the target device.
 - The output binary is thin arm64 by default; `--keep-fat` keeps the original
   armv7 slice (unpatched).
 - The browser engine requires a binary `Info.plist` and does not support ZIP64

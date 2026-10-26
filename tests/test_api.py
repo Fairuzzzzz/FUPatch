@@ -69,8 +69,11 @@ class ApiTest(unittest.TestCase):
                                  headers=headers)
         return data
 
-    def start(self, upload_id):
-        _status, data = self.req('/api/start', {'upload': upload_id})
+    def start(self, upload_id, profile=None):
+        body = {'upload': upload_id}
+        if profile:
+            body['profile'] = profile
+        _status, data = self.req('/api/start', body)
         return data['job']
 
     def wait_job(self, job_id, timeout=120):
@@ -135,6 +138,17 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(info['steps_pending'], 36)
         self.assertTrue(info['patches_ok'])
 
+    def test_inspect_profile(self):
+        _status, data = self.req('/api/inspect', {
+            'ipa': self.ipa, 'profile': 'iphone11-xr'})
+        info = data['info']
+        self.assertTrue(info['supported'])
+        self.assertEqual(info['profile'], 'iphone11-xr')
+        self.assertEqual(info['steps_pending'], 39)
+        self.assertEqual(
+            info['profile_result_sha256'],
+            '5e3b6912cedc7acc4ee148d1beb20b64b59388fdb9912df9c066ad62fd92b3e6')
+
     def test_inspect_missing(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self.req('/api/inspect', {'ipa': '/does/not/exist.ipa'})
@@ -197,6 +211,17 @@ class ApiTest(unittest.TestCase):
                              final['result']['output_sha256'])
         # upload temp file is removed once the job is done
         self.assertEqual(self.state['uploads'], {})
+
+    def test_patch_profile_job(self):
+        up = self.upload(name='iphone11.ipa')
+        job = self.start(up['upload'], 'iphone11-xr')
+        done = self.wait_job(job['id'])
+        self.assertEqual(done['state'], 'done', done)
+        self.assertEqual(done['result']['profile'], 'iphone11-xr')
+        self.assertEqual(
+            done['result']['slice_sha256'],
+            '5e3b6912cedc7acc4ee148d1beb20b64b59388fdb9912df9c066ad62fd92b3e6')
+        self.assertEqual(done['result']['out_name'], 'MHFU_patched.ipa')
 
     def test_download(self):
         done = self.patch_once()

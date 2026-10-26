@@ -3,7 +3,7 @@
  *
  *   ui/node_modules/.bin/esbuild tools/parity.ts --bundle --platform=node \
  *     --format=esm --outfile=/tmp/opencode/parity.mjs
- *   node /tmp/opencode/parity.mjs original.ipa /tmp/opencode/js.ipa
+ *   node /tmp/opencode/parity.mjs original.ipa /tmp/opencode/js.ipa [profile]
  */
 import { createReadStream, openAsBlob, readFileSync } from 'node:fs'
 import { open } from 'node:fs/promises'
@@ -17,8 +17,9 @@ import type { RandomAccess } from '../ui/src/lib/zip'
 
 const ipa = process.argv[2]
 const out = process.argv[3]
+const profile = process.argv[4]
 if (!ipa || !out) {
-  console.error('usage: parity.mjs <original.ipa> <out.ipa>')
+  console.error('usage: parity.mjs <original.ipa> <out.ipa> [profile]')
   process.exit(2)
 }
 
@@ -46,6 +47,7 @@ const result = await patchIpa(
   },
   manifest,
   {
+    profile,
     additions: {
       'assets/LaunchScreen.storyboard': new TextEncoder().encode(storyboard),
     },

@@ -54,7 +54,7 @@ def _info_member(names):
     return None
 
 
-def look(ipa_path, patch_set=None, directory=None):
+def look(ipa_path, patch_set=None, directory=None, profile_id=None):
     """Inspect an IPA without modifying anything."""
     ipa_path = os.path.abspath(ipa_path)
     if not os.path.isfile(ipa_path):
@@ -88,6 +88,19 @@ def look(ipa_path, patch_set=None, directory=None):
     else:
         m, kind = mf.find_set_for_sha(arm['sha256'], directory)
 
+    profile = None
+    if m:
+        try:
+            if profile_id:
+                profile = mf.select_profile(m, profile_id)
+            elif kind == 'result':
+                profile = (mf.find_profile_for_sha(m, arm['sha256'])
+                           or mf.select_profile(m, None))
+            else:
+                profile = mf.select_profile(m, None)
+        except mf.ManifestError as exc:
+            raise PatchError(str(exc))
+
     report = {
         'ipa': ipa_path,
         'size': idx['size'],
@@ -107,6 +120,22 @@ def look(ipa_path, patch_set=None, directory=None):
         'cryptid': arm.get('cryptid'),
         'supported': False,
         'match': kind,
+        'profile': profile.get('id') if profile else None,
+        'profile_label': profile.get('label') if profile else None,
+        'profile_note': profile.get('note') if profile else None,
+        'profile_default': bool(profile and profile.get('default')),
+        'profile_result_sha256': (
+            mf.profile_result_sha(m, profile) if m else None),
+        'profiles': [
+            {
+                'id': item.get('id'),
+                'label': item.get('label'),
+                'note': item.get('note'),
+                'default': bool(item.get('default')),
+                'result_sha256': item.get('result_sha256'),
+            }
+            for item in ((m.get('profiles') or []) if m else [])
+        ],
         'patch_set': None,
         'patch_title': None,
         'features': [],
@@ -125,21 +154,23 @@ def look(ipa_path, patch_set=None, directory=None):
         return report
     report['patch_set'] = m['id']
     report['patch_title'] = m.get('title', m['id'])
-    used = {step['feature'] for step in m['binary_steps']}
+    steps = mf.profile_steps(m, profile)
+    used = {step['feature'] for step in steps}
     report['features'] = [f for f in m.get('features', []) if f['id'] in used]
-    report['steps_total'] = len(m['binary_steps'])
+    report['steps_total'] = len(steps)
 
     base = int(m['slice']['vaddr_base'], 0)
-    sl = macho.extract(data, arm)
-    for step in m['binary_steps']:
+    sl = bytearray(macho.extract(data, arm))
+    for step in steps:
         off = int(step['vaddr'], 0) - base
         exp = bytes.fromhex(step['expect'])
         rep = bytes.fromhex(step['replace'])
-        cur = sl[off:off + len(exp)]
+        cur = bytes(sl[off:off + len(exp)])
         if cur == rep:
             report['steps_applied'] += 1
         elif cur == exp:
             report['steps_pending'] += 1
+            sl[off:off + len(rep)] = rep
         else:
             report['steps_mismatch'].append(step['id'])
 
@@ -173,13 +204,14 @@ def suggest_output(ipa_path):
     return candidate
 
 
-def apply_steps(slice_bytes, m, on_step=None):
-    """Apply binary steps (3-way: expect→write, replace→skip, else→fail)."""
+def apply_steps(slice_bytes, m, on_step=None, profile=None):
+    """Apply base steps plus the selected profile overrides."""
     base = int(m['slice']['vaddr_base'], 0)
     buf = bytearray(slice_bytes)
     applied, skipped = [], []
-    total = len(m['binary_steps'])
-    for i, step in enumerate(m['binary_steps']):
+    steps = mf.profile_steps(m, profile)
+    total = len(steps)
+    for i, step in enumerate(steps):
         off = int(step['vaddr'], 0) - base
         exp = bytes.fromhex(step['expect'])
         rep = bytes.fromhex(step['replace'])
@@ -200,7 +232,7 @@ def apply_steps(slice_bytes, m, on_step=None):
 
 def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
           on_event=None, is_cancelled=None, directory=None, patch_set=None,
-          force=False):
+          force=False, profile=None):
     """Patch the IPA and write the result. Returns a report."""
     started = time.monotonic()
     ipa_path = os.path.abspath(ipa_path)
@@ -214,10 +246,13 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
         raise PatchError('output folder does not exist: %s' % out_dir)
 
     _emit(on_event, 'inspect', 1, 'reading IPA')
-    info = look(ipa_path, patch_set=patch_set, directory=directory)
+    info = look(ipa_path, patch_set=patch_set, directory=directory,
+                profile_id=profile)
     if not info['supported']:
         raise PatchError(info['reason'] or 'unsupported IPA')
     m = mf.load_set(info['patch_set'], directory)
+    selected = mf.select_profile(m, profile) if profile else mf.select_profile(
+        m, info.get('profile'))
 
     need = info['size'] + (32 << 20)
     free = shutil.disk_usage(out_dir).free
@@ -248,11 +283,13 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
         pct = 10 + int(14 * done / max(1, total))
         _emit(on_event, 'steps', pct, '%d/%d' % (done, total))
 
-    new_slice, applied, skipped = apply_steps(slice_bytes, m, on_step)
+    new_slice, applied, skipped = apply_steps(
+        slice_bytes, m, on_step, profile=selected)
     got = hashlib.sha256(new_slice).hexdigest()
-    if got != m['slice']['result_sha256']:
+    result_sha = mf.profile_result_sha(m, selected)
+    if got != result_sha:
         raise PatchError('resulting binary sha mismatch\n  got     : %s\n  expected: %s'
-                         % (got, m['slice']['result_sha256']))
+                         % (got, result_sha))
     _emit(on_event, 'steps', 24, 'binary sha ok')
 
     fat_out = bool(keep_fat and ma['kind'] == 'fat')
@@ -280,7 +317,11 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
         'removed': sorted(removals),
         'added': [name for name, _ in additions],
         'binary_sha256': got,
-        'slice_sha256': m['slice']['result_sha256'],
+        'slice_sha256': result_sha,
+        'profile': selected.get('id') if selected else None,
+        'profile_label': selected.get('label') if selected else None,
+        'profile_note': selected.get('note') if selected else None,
+        'profile_result_sha256': result_sha,
         'keep_fat': fat_out,
         'exe_kind_in': ma['kind'],
         'exe_kind_out': 'fat' if fat_out else 'thin',
@@ -315,7 +356,7 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
         back = ziprewrite.read_member(tmp, info['exe_member'])
         back_slice = macho.extract(back, macho.find_arm64(macho.analyze(back)))
         back_sha = hashlib.sha256(back_slice).hexdigest()
-        if back_sha != m['slice']['result_sha256']:
+        if back_sha != result_sha:
             raise PatchError('binary in output does not match (sha %s)' % back_sha)
         back_plist = plistlib.loads(ziprewrite.read_member(tmp, info['info_member']))
         if back_plist.get('CFBundleShortVersionString') != ver:

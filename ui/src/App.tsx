@@ -22,8 +22,14 @@ const PHASES: Record<string, string> = {
 
 const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
 
+const PROFILES = MANIFEST.profiles ?? [];
+const DEFAULT_PROFILE =
+  PROFILES.find((profile) => profile.default) ?? PROFILES[0];
+
 function App() {
   const [file, setFile] = useState<File | null>(null);
+  const [profileId, setProfileId] = useState(DEFAULT_PROFILE?.id ?? "");
+  const [outProfile, setOutProfile] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [pct, setPct] = useState(0);
   const [detail, setDetail] = useState("");
@@ -51,6 +57,7 @@ function App() {
     setError("");
     setOutName("");
     setOutSize(0);
+    setOutProfile("");
     setDownloadUrl("");
     setFile(null);
     if (inputRef.current) inputRef.current.value = "";
@@ -78,6 +85,7 @@ function App() {
         },
         MANIFEST,
         {
+          profile: profileId || undefined,
           additions: ADDITIONS,
           onEvent: (event) => {
             setPct(event.pct);
@@ -92,6 +100,7 @@ function App() {
       setDownloadUrl(url);
       setOutName(result.outName);
       setOutSize(result.size);
+      setOutProfile(result.profileLabel ?? "");
       setPct(100);
       setDetail("");
       setPhase("done");
@@ -99,7 +108,7 @@ function App() {
       setError(e instanceof Error ? e.message : String(e));
       setPhase("error");
     }
-  }, [file, phase, clearUrl]);
+  }, [file, phase, clearUrl, profileId]);
 
   const busy = phase === "patching";
 
@@ -121,6 +130,11 @@ function App() {
               <p className="mt-1.5 max-w-full break-all font-mono text-[12px] leading-relaxed text-neutral-500">
                 {outName} · {mb(outSize)}
               </p>
+              {outProfile && (
+                <p className="mt-1 text-[11.5px] text-neutral-400">
+                  {outProfile}
+                </p>
+              )}
               <div className="mt-5 flex gap-2">
                 <Button asChild data-testid="download-button">
                   <a href={downloadUrl} download={outName}>
@@ -193,11 +207,48 @@ function App() {
                 )}
               </div>
 
+              {PROFILES.length > 0 && (
+                <div className="mt-5">
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <span className="text-[12px] font-medium">iPhone model</span>
+                    <span className="text-[11px] text-neutral-400">Pick one</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {PROFILES.map((profile) => {
+                      const selected = profileId === profile.id;
+                      return (
+                        <Button
+                          key={profile.id}
+                          type="button"
+                          variant={selected ? "default" : "outline"}
+                          aria-pressed={selected}
+                          disabled={busy}
+                          className="h-auto min-h-10 flex-col items-start justify-center gap-0 whitespace-normal px-2.5 py-1.5 text-left"
+                          onClick={() => {
+                            setProfileId(profile.id);
+                            setError("");
+                          }}
+                        >
+                          <span className="text-[11.5px] leading-tight font-medium">
+                            {profile.label}
+                          </span>
+                          {profile.note && (
+                            <span className="text-[10px] leading-tight opacity-60">
+                              {profile.note}
+                            </span>
+                          )}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <Button
                 data-testid="patch-button"
                 className="mt-2.5 h-10 w-full"
                 onClick={() => void runPatch()}
-                disabled={!file || busy}
+                disabled={!file || busy || (PROFILES.length > 0 && !profileId)}
               >
                 {busy ? (
                   <>

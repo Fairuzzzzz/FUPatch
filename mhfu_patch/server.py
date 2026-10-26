@@ -142,7 +142,7 @@ def make_app(patch_dir=None, workdir=None):
         try:
             info = await asyncio.to_thread(
                 engine.look, os.path.expanduser(ipa), body.get('patch_set'),
-                app.state.patch_dir)
+                app.state.patch_dir, body.get('profile'))
         except engine.PatchError as exc:
             fail(400, str(exc))
         info['suggest'] = {'out': engine.suggest_output(info['ipa'])}
@@ -216,7 +216,8 @@ def make_app(patch_dir=None, workdir=None):
                 report = engine.patch(
                     entry['path'], entry['out'],
                     on_event=job.emit, is_cancelled=lambda: job.cancel,
-                    directory=app.state.patch_dir, force=True)
+                    directory=app.state.patch_dir, force=True,
+                    profile=body.get('profile'))
                 report['out_name'] = os.path.basename(report.get('out') or '')
                 return report
             finally:

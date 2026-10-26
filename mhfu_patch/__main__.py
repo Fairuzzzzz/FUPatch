@@ -23,7 +23,7 @@ def _mb(n):
 
 def cmd_inspect(args):
     info = engine.look(os.path.expanduser(args.ipa), patch_set=args.patch_set,
-                       directory=args.patches)
+                       directory=args.patches, profile_id=args.profile)
     if args.json:
         print(json.dumps(info, indent=2, ensure_ascii=False))
         return 0 if info['supported'] else 2
@@ -40,6 +40,9 @@ def cmd_inspect(args):
     if info['supported']:
         print('Patch set  : %s — %s'
               % (info['patch_set'], info['patch_title']))
+        if info.get('profile'):
+            print('Profile    : %s — %s'
+                  % (info['profile'], info.get('profile_label') or ''))
         print('Steps      : %d total, %d pending, %d applied'
               % (info['steps_total'], info['steps_pending'],
                  info['steps_applied']))
@@ -79,7 +82,8 @@ def cmd_patch(args):
         report = engine.patch(ipa, out, version=args.version,
                               keep_fat=args.keep_fat, dry_run=args.dry_run,
                               on_event=on_event, directory=args.patches,
-                              patch_set=args.patch_set, force=args.force)
+                              patch_set=args.patch_set, force=args.force,
+                              profile=args.profile)
     except engine.StepMismatch as exc:
         print('\nFAILED: %s' % exc, file=sys.stderr)
         return 3
@@ -108,6 +112,9 @@ def cmd_patch(args):
     else:
         print('  version : %s -> %s'
               % (report['old_version'], report['version']))
+    if report.get('profile'):
+        print('  profile : %s — %s'
+              % (report['profile'], report.get('profile_label') or ''))
     print('  binary  : %s, slice sha %s'
           % (report['exe_kind_out'], report['slice_sha256']))
     print('  steps   : %d applied, %d skipped'
@@ -141,6 +148,7 @@ def build_parser():
     p = sub.add_parser('inspect', help='inspect an IPA without modifying it')
     p.add_argument('--ipa', required=True)
     p.add_argument('--patch-set')
+    p.add_argument('--profile', help='device profile id (inspect --json lists them)')
     p.add_argument('--json', action='store_true')
     p.set_defaults(func=cmd_inspect)
 
@@ -153,6 +161,7 @@ def build_parser():
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--force', action='store_true', help='overwrite the output file')
     p.add_argument('--patch-set')
+    p.add_argument('--profile', help='device profile id (inspect --json lists them)')
     p.set_defaults(func=cmd_patch)
 
     p = sub.add_parser('serve', help='run the local web UI')

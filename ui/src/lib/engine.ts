@@ -13,6 +13,16 @@ export interface PatchStep {
   note?: string
 }
 
+export interface PatchProfile {
+  id: string
+  label: string
+  note?: string
+  default?: boolean
+  result_sha256: string
+  overrides?: { id: string; replace: string }[]
+  steps: PatchStep[]
+}
+
 export interface PatchManifest {
   schema: number
   id: string
@@ -26,6 +36,7 @@ export interface PatchManifest {
     result_sha256: string
   }
   binary_steps: PatchStep[]
+  profiles?: PatchProfile[]
   members_remove: { exact?: string[]; globs?: string[] }
   members_add: { name: string; source?: string; data?: string }[]
   info_changes: { set?: Record<string, unknown>; remove?: string[] }
@@ -40,6 +51,7 @@ export interface PatchEvent {
 
 export interface PatchOptions {
   keepFat?: boolean
+  profile?: string
   additions?: Record<string, Uint8Array>
   onEvent?: (event: PatchEvent) => void
   isCancelled?: () => boolean
@@ -47,6 +59,8 @@ export interface PatchOptions {
 
 export interface PatchResult {
   version: string
+  profile: string | null
+  profileLabel: string | null
   applied: string[]
   skipped: string[]
   removed: string[]
@@ -93,6 +107,23 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   let out = ''
   for (const byte of view) out += byte.toString(16).padStart(2, '0')
   return out
+}
+
+function selectProfile(
+  manifest: PatchManifest,
+  profileId?: string,
+): PatchProfile | null {
+  const profiles = manifest.profiles ?? []
+  if (!profiles.length) {
+    if (profileId) throw new PatchError('unknown device profile: ' + profileId)
+    return null
+  }
+  if (profileId) {
+    const found = profiles.find((profile) => profile.id === profileId)
+    if (!found) throw new PatchError('unknown device profile: ' + profileId)
+    return found
+  }
+  return profiles.find((profile) => profile.default) ?? profiles[0]
 }
 
 function globToRegExp(pattern: string): RegExp {
@@ -219,9 +250,16 @@ export async function patchIpa(
   }
   const slice = extract(exeData, arm)
   const sourceSha = await sha256Hex(slice)
+  const resultShas = new Set([
+    manifest.slice.result_sha256.toLowerCase(),
+    ...(manifest.profiles ?? []).map((profile) =>
+      profile.result_sha256.toLowerCase(),
+    ),
+  ])
   const known =
     manifest.slice.source_sha256.includes(sourceSha) ||
-    manifest.slice.intermediate_sha256.includes(sourceSha)
+    manifest.slice.intermediate_sha256.includes(sourceSha) ||
+    resultShas.has(sourceSha)
   if (!known) {
     throw new PatchError(
       'unknown binary (sha ' +
@@ -229,16 +267,29 @@ export async function patchIpa(
         ') — not a supported MHFU IPA',
     )
   }
+  const profile = selectProfile(manifest, options.profile)
+  const expectedResult = profile?.result_sha256 ?? manifest.slice.result_sha256
+  const steps = profile
+    ? [
+        ...manifest.binary_steps.map((step) => {
+          const override = profile.overrides?.find(
+            (item) => item.id === step.id,
+          )
+          return override ? { ...step, replace: override.replace } : step
+        }),
+        ...profile.steps,
+      ]
+    : manifest.binary_steps
   emit('verify', 8, 'slice sha ' + sourceSha.slice(0, 16))
 
   const patched = slice.slice()
   const base = Number.parseInt(manifest.slice.vaddr_base, 16)
   const applied: string[] = []
   const skipped: string[] = []
-  const total = manifest.binary_steps.length
+  const total = steps.length
   for (let i = 0; i < total; i++) {
     check()
-    const step = manifest.binary_steps[i]
+    const step = steps[i]
     const offset = Number.parseInt(step.vaddr, 16) - base
     const expect = hexToBytes(step.expect)
     const replace = hexToBytes(step.replace)
@@ -270,12 +321,12 @@ export async function patchIpa(
     emit('steps', 10 + Math.floor((14 * (i + 1)) / Math.max(1, total)), `${i + 1}/${total}`)
   }
   const resultSha = await sha256Hex(patched)
-  if (resultSha !== manifest.slice.result_sha256) {
+  if (resultSha !== expectedResult) {
     throw new PatchError(
       'resulting binary sha mismatch\n  got     : ' +
         resultSha +
         '\n  expected: ' +
-        manifest.slice.result_sha256,
+        expectedResult,
     )
   }
   emit('steps', 24, 'binary sha ok')
@@ -332,6 +383,8 @@ export async function patchIpa(
   emit('done', 100, 'complete')
   return {
     version,
+    profile: profile?.id ?? null,
+    profileLabel: profile?.label ?? null,
     applied,
     skipped,
     removed: [...removals].sort(),
