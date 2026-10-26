@@ -232,11 +232,6 @@ function App() {
                           <span className="text-[11.5px] leading-tight font-medium">
                             {profile.label}
                           </span>
-                          {profile.note && (
-                            <span className="text-[10px] leading-tight opacity-60">
-                              {profile.note}
-                            </span>
-                          )}
                         </Button>
                       );
                     })}
