@@ -10,3 +10,5 @@ ui/.vite/
 ui/dist/
 ui/tsconfig.tsbuildinfo
 .venv/
+
+*.bat
