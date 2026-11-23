@@ -1,11 +1,12 @@
 import hashlib
 import os
+import plistlib
 import tempfile
 import unittest
 import zipfile
 
 from tests.common import (BASE186, FINAL, ORIG_BIN, RESULT_SHA, arm64_stub,
-                          have, make_synthetic_ipa)
+                          ORIGINAL_IPA, have, make_synthetic_ipa)
 from mhfu_patch import engine, manifest
 
 BASE = 0x100000000
@@ -91,6 +92,62 @@ class BinaryStepsTest(unittest.TestCase):
         """apply_steps itself does not verify; engine.patch does."""
         out, _applied, _skipped = engine.apply_steps(self.orig, self.m)
         self.assertEqual(len(out), len(self.orig))
+
+
+@unittest.skipUnless(have(ORIGINAL_IPA), 'original IPA not available')
+class IpadLoadingProfileTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.m = manifest.load_set()
+        with zipfile.ZipFile(ORIGINAL_IPA) as zf:
+            info_name = next(
+                name for name in zf.namelist()
+                if name.endswith('.app/Info.plist'))
+            plist = plistlib.loads(zf.read(info_name))
+            executable = info_name.rsplit('/', 1)[0] + '/' + \
+                plist['CFBundleExecutable']
+            data = zf.read(executable)
+
+        analysis = engine.macho.analyze(data)
+        arm64 = engine.macho.find_arm64(analysis)
+        if arm64 is None:
+            raise AssertionError('original IPA has no arm64 slice')
+        cls.source = engine.macho.extract(data, arm64)
+        cls.baseline, _applied, _skipped = engine.apply_steps(
+            cls.source, cls.m, profile='iphone12-14')
+
+    def assert_only_profile_step_differs(self, profile_id, step_id, result_sha):
+        experimental, _applied, _skipped = engine.apply_steps(
+            self.source, self.m, profile=profile_id)
+        self.assertEqual(hashlib.sha256(self.baseline).hexdigest(), RESULT_SHA)
+        self.assertEqual(
+            hashlib.sha256(experimental).hexdigest(),
+            result_sha)
+        step = next(
+            step for step in self.m['binary_steps'] if step['id'] == step_id)
+        offset = int(step['vaddr'], 0) - BASE
+        expected_diffs = set(range(
+            offset, offset + len(bytes.fromhex(step['expect']))))
+        actual_diffs = {
+            index for index, (before, after)
+            in enumerate(zip(self.baseline, experimental))
+            if before != after
+        }
+        self.assertEqual(actual_diffs, expected_diffs)
+        self.assertEqual(
+            self.baseline[offset:offset + 4].hex(), step['replace'])
+        self.assertEqual(
+            experimental[offset:offset + 4].hex(), step['expect'])
+
+    def test_only_loading31_differs_from_iphone12_14(self):
+        self.assert_only_profile_step_differs(
+            'ipad-air-m2-loading31-test', 'loading.31',
+            '4b87d8b0f59bc4160df9fb7c6c30932fc61e6bed360e103d3f644631fd04c8e1')
+
+    def test_only_loading30_differs_from_iphone12_14(self):
+        self.assert_only_profile_step_differs(
+            'ipad-air-m2-loading30-test', 'loading.30',
+            '63559def58826293ed745916854e44cab0a26b7ae0e895af84f49fa6f31ad0bd')
 
 
 @unittest.skipUnless(have(ORIG_BIN), 'golden binary not available')
@@ -183,7 +240,8 @@ class LookAndPatchTest(unittest.TestCase):
         self.assertEqual([p['id'] for p in info['profiles']],
                          ['iphone11-xr', 'iphone11-pro', 'iphone12-14',
                           'iphone14pro-15', 'iphone14-15-promax',
-                          'iphone16-17'])
+                          'iphone16-17', 'ipad-air-m2-loading31-test',
+                          'ipad-air-m2-loading30-test'])
 
     def test_patch_profile(self):
         out = os.path.join(self.tmp.name, 'iphone11.ipa')

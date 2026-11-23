@@ -2,7 +2,7 @@
 """Create a native-iPad compatibility experiment from a verified MHFU IPA.
 
 Only Info.plist's UIDeviceFamily changes. The executable must already match
-the verified iphone12-14 patch result.
+the verified result for the selected device profile.
 """
 import argparse
 import hashlib
@@ -19,7 +19,7 @@ if ROOT not in sys.path:
 
 from mhfu_patch import engine, manifest, ziprewrite  # noqa: E402
 
-PROFILE_ID = 'iphone12-14'
+DEFAULT_PROFILE_ID = 'iphone12-14'
 
 
 class ExperimentError(RuntimeError):
@@ -127,22 +127,25 @@ def _archive_report(source, output):
     }
 
 
-def _check_verified_input(ipa_path, selected_manifest, patch_directory=None):
+def _check_verified_input(ipa_path, selected_manifest, patch_directory=None,
+                          profile_id=DEFAULT_PROFILE_ID):
     info = engine.look(
-        ipa_path, profile_id=PROFILE_ID, directory=patch_directory)
+        ipa_path, profile_id=profile_id, directory=patch_directory)
     expected_sha = manifest.profile_result_sha(
-        selected_manifest, PROFILE_ID)
+        selected_manifest, profile_id)
     if (not info['supported'] or info['match'] != 'result'
+            or info.get('profile') != profile_id
             or info['arm64_sha256'] != expected_sha
             or info['profile_result_sha256'] != expected_sha):
         raise ExperimentError(
             'input is not a verified %s IPA (match=%r, arm64 sha=%s)'
-            % (PROFILE_ID, info.get('match'), info.get('arm64_sha256')))
+            % (profile_id, info.get('match'), info.get('arm64_sha256')))
     return info
 
 
-def create_experiment(ipa_path, out_path, patch_directory=None):
-    """Write and verify the plist-only native-iPad experiment."""
+def create_experiment(ipa_path, out_path, patch_directory=None,
+                      profile_id=DEFAULT_PROFILE_ID):
+    """Write and verify a plist-only native-iPad experiment."""
     ipa_path = os.path.abspath(ipa_path)
     out_path = os.path.abspath(out_path)
     if not os.path.isfile(ipa_path):
@@ -160,7 +163,7 @@ def create_experiment(ipa_path, out_path, patch_directory=None):
 
     selected_manifest = manifest.load_set('mhfu-ios', patch_directory)
     source_info = _check_verified_input(
-        ipa_path, selected_manifest, patch_directory)
+        ipa_path, selected_manifest, patch_directory, profile_id)
     index = ziprewrite.read_index(ipa_path)
     names = ziprewrite.names(index)
     plist_name = _info_member(names)
@@ -205,7 +208,7 @@ def create_experiment(ipa_path, out_path, patch_directory=None):
                 'output executable SHA-256 differs from verified input')
 
         output_info = _check_verified_input(
-            tmp_path, selected_manifest, patch_directory)
+            tmp_path, selected_manifest, patch_directory, profile_id)
         if output_info['arm64_sha256'] != source_info['arm64_sha256']:
             raise ExperimentError('verified arm64 slice SHA-256 changed')
 
@@ -233,7 +236,7 @@ def create_experiment(ipa_path, out_path, patch_directory=None):
     return {
         'input': ipa_path,
         'output': out_path,
-        'profile': PROFILE_ID,
+        'profile': profile_id,
         'uid_device_family_before': [1],
         'uid_device_family_after': [1, 2],
         'executable_sha256_before': source_executable_sha,
@@ -249,9 +252,13 @@ def main(argv=None):
     parser.add_argument('--out', required=True, help='new experimental output IPA')
     parser.add_argument(
         '--patches', help='patch manifest directory (defaults to repository patches)')
+    parser.add_argument(
+        '--profile', default=DEFAULT_PROFILE_ID,
+        help='verified profile used to build the input (default: %(default)s)')
     args = parser.parse_args(argv)
     try:
-        report = create_experiment(args.ipa, args.out, args.patches)
+        report = create_experiment(
+            args.ipa, args.out, args.patches, args.profile)
     except (ExperimentError, engine.PatchError, manifest.ManifestError,
             ziprewrite.ZipError, OSError, ValueError) as exc:
         print('error: %s' % exc, file=sys.stderr)

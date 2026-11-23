@@ -149,6 +149,32 @@
         }
       ],
       "steps": []
+    },
+    {
+      "id": "ipad-air-m2-loading31-test",
+      "label": "iPad Air M2 — loading.31 test",
+      "note": "experimental · restores original loading.31 instruction only",
+      "result_sha256": "4b87d8b0f59bc4160df9fb7c6c30932fc61e6bed360e103d3f644631fd04c8e1",
+      "overrides": [
+        {
+          "id": "loading.31",
+          "replace": "4932fd97"
+        }
+      ],
+      "steps": []
+    },
+    {
+      "id": "ipad-air-m2-loading30-test",
+      "label": "iPad Air M2 — loading.30 test",
+      "note": "experimental · restores original loading.30 instruction only",
+      "result_sha256": "63559def58826293ed745916854e44cab0a26b7ae0e895af84f49fa6f31ad0bd",
+      "overrides": [
+        {
+          "id": "loading.30",
+          "replace": "13814079"
+        }
+      ],
+      "steps": []
     }
   ],
   "binary_steps": [

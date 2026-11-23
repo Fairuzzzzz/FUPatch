@@ -16,6 +16,7 @@ class EnableIpadFamilyTest(unittest.TestCase):
         self.src = os.path.join(self.tmp.name, 'iphone.ipa')
         self.dst = os.path.join(self.tmp.name, 'ipad-experiment.ipa')
         self.exe = b'verified synthetic executable'
+        self.profile_id = 'iphone12-14'
         with zipfile.ZipFile(self.src, 'w', zipfile.ZIP_DEFLATED) as zf:
             plist = {
                 'CFBundleExecutable': 'MH Unite',
@@ -40,10 +41,11 @@ class EnableIpadFamilyTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def _verified_info(self, _ipa_path, profile_id=None, **_kwargs):
-        self.assertEqual(profile_id, 'iphone12-14')
+        self.assertEqual(profile_id, self.profile_id)
         return {
             'supported': True,
             'match': 'result',
+            'profile': profile_id,
             'arm64_sha256': self.executable_sha,
             'profile_result_sha256': self.executable_sha,
         }
@@ -78,10 +80,22 @@ class EnableIpadFamilyTest(unittest.TestCase):
             self.assertEqual(original, modified)
 
     @mock.patch.object(engine, 'look')
+    def test_experimental_profile_can_be_packaged_for_native_ipad(self, look):
+        self.profile_id = 'ipad-air-m2-loading31-test'
+        look.side_effect = self._verified_info
+        report = enable_ipad_family.create_experiment(
+            self.src, self.dst, profile_id=self.profile_id)
+        self.assertEqual(report['profile'], self.profile_id)
+        self.assertEqual(report['uid_device_family_after'], [1, 2])
+        self.assertEqual(report['executable_sha256_before'], self.executable_sha)
+        self.assertEqual(report['executable_sha256_after'], self.executable_sha)
+
+    @mock.patch.object(engine, 'look')
     def test_rejects_unverified_binary(self, look):
         look.return_value = {
             'supported': False,
             'match': None,
+            'profile': None,
             'arm64_sha256': '00' * 32,
             'profile_result_sha256': self.executable_sha,
         }

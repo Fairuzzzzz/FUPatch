@@ -103,11 +103,18 @@ been tested on hardware.
 | `iphone14pro-15` | iPhone 14 Pro, 15 | 177 / 177 / 0 / 63 | 1.6 | 3x, 59 pt; needs device test |
 | `iphone14-15-promax` | iPhone 14 Pro Max, 15 Plus, 15 Pro Max | 177 / 177 / 0 / 63 | 1.764 | 3x, 59 pt; needs device test |
 | `iphone16-17` | iPhone 16 / 17 (generic) | 177 / 177 / 0 / 63 | 1.6 | fallback, not per-model |
+| `ipad-air-m2-loading31-test` | iPad Air M2 | unchanged | unchanged | experiment; restores only `loading.31` |
+| `ipad-air-m2-loading30-test` | iPad Air M2 | unchanged | unchanged | experiment; restores only `loading.30` |
 
 The **iPhone 12 / 13 / 14** profile is the default and is binary-identical to
 the original patch. The other profiles are experimental until a device test
 confirms the HUD and safe area. The iPhone 16 / 17 button is deliberately a
 generic fallback; the 16 Pro / 17 Pro / 17 Air dimensions have not been measured.
+The `ipad-air-m2-loading30-test` and `ipad-air-m2-loading31-test` profiles are
+binary-only diagnostics and do not change the manifest's `UIDeviceFamily = [1]`.
+To create a native-family test IPA, patch the original IPA with the selected
+profile, then run `tools/enable_ipad_family.py --profile PROFILE_ID` on that
+verified intermediate IPA. These experiments are not confirmed UI fixes.
 
 ## Using the CLI
 

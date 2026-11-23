@@ -55,6 +55,7 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual([p['id'] for p in profiles], [
             'iphone11-xr', 'iphone11-pro', 'iphone12-14',
             'iphone14pro-15', 'iphone14-15-promax', 'iphone16-17',
+            'ipad-air-m2-loading31-test', 'ipad-air-m2-loading30-test',
         ])
         self.assertEqual(len({p['id'] for p in profiles}), len(profiles))
         default = manifest.default_profile(self.m)
@@ -69,6 +70,30 @@ class ManifestTest(unittest.TestCase):
                          39)
         self.assertEqual(len(manifest.profile_steps(self.m, 'iphone12-14')),
                          36)
+        loading_test = manifest.select_profile(
+            self.m, 'ipad-air-m2-loading31-test')
+        loading31 = next(s for s in self.m['binary_steps']
+                         if s['id'] == 'loading.31')
+        self.assertEqual(loading_test['overrides'], [
+            {'id': 'loading.31', 'replace': loading31['expect']},
+        ])
+        self.assertEqual(
+            loading_test['result_sha256'],
+            '4b87d8b0f59bc4160df9fb7c6c30932fc61e6bed360e103d3f644631fd04c8e1')
+        self.assertEqual(len(manifest.profile_steps(
+            self.m, 'ipad-air-m2-loading31-test')), 36)
+        loading30_test = manifest.select_profile(
+            self.m, 'ipad-air-m2-loading30-test')
+        loading30 = next(s for s in self.m['binary_steps']
+                         if s['id'] == 'loading.30')
+        self.assertEqual(loading30_test['overrides'], [
+            {'id': 'loading.30', 'replace': loading30['expect']},
+        ])
+        self.assertEqual(
+            loading30_test['result_sha256'],
+            '63559def58826293ed745916854e44cab0a26b7ae0e895af84f49fa6f31ad0bd')
+        self.assertEqual(len(manifest.profile_steps(
+            self.m, 'ipad-air-m2-loading30-test')), 36)
         self.assertIsNone(manifest.find_profile_for_sha(self.m, '00' * 32))
         self.assertEqual(
             manifest.find_profile_for_sha(
