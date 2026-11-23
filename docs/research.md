@@ -214,6 +214,16 @@ Earlier static analysis also marked `0x10036BA00` (`w8`) and `0x10036BA2C`
 (`w27`) as candidate X/Y coordinate stores within the `0x10036B960` drawing
 path. They have not been shown to store the hamburger's position.
 
+**New runtime validation (Phase 4):** LLDB traced the closed-menu `"  Menu"`
+rendering path through `0x1003A5904`, `0x10036C870`, `0x100379100`,
+`0x1003788B8`, and `0x100378D6C`. A targeted, repeating breakpoint
+changed the X argument from 1822 to 1622 for the atlas-564 draw call.
+The user visually confirmed that the circular background behind the
+**left navigation arrow** moved; the hamburger did not. This verifies
+independent runtime repositioning of that specific graphic call, not
+hamburger identification or movement of its touch target. See Phase 4
+for the callsite condition, atlas record, and reversal procedure.
+
 See [Phase 4 Cockpit rendering paths](research-phase4.md) for the branch
 conditions, direct callees, static evidence, unknowns, and targeted LLDB
 experiments. The menu-transition path at `0x10037D8EC` is deprioritized after
@@ -294,9 +304,10 @@ Research rules:
 ## 10. Current conclusion
 
 UIKit touch delivery and native input transfer are partially reconstructed.
-The rectangle-test candidate did not fire during a confirmed activation. The
-Cockpit text renderer and the Phase 4 descriptor/atlas paths are promising
-static leads, but the hamburger itself has not been identified.
+The rectangle-test candidate did not fire during a confirmed activation.
+The Cockpit descriptor/atlas rendering path has been confirmed at runtime,
+and an atlas-564 call was visually identified as the left navigation arrow
+background. The hamburger itself has not been identified.
 
 The next milestone is to capture a descriptor/atlas draw that can be matched
 visually to the hamburger and determine whether its touch target uses the same

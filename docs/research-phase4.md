@@ -78,7 +78,7 @@ at the descriptor-dispatch entry only when called from the confirmed
 `0x10036B960` bit-6-clear callsite:
 
 ```lldb
-script t=lldb.debugger.GetSelectedTarget(); m=next(t.GetModuleAtIndex(i) for i in range(t.GetNumModules()) if t.GetModuleAtIndex(i).GetFileSpec().GetFilename()=="MH Unite"); assert m.GetUUIDString().replace("-","").lower()=="58cc55c760ca3196b5d20c2aeb64b32b"; rt=lambda a:m.ResolveFileAddress(a).GetLoadAddress(t); err=lldb.SBError(); cockpit=t.GetProcess().ReadPointer(rt(0x100732fc0),err); assert err.Success(); bp=t.BreakpointCreateByAddress(rt(0x10036a270)); bp.SetCondition("((unsigned long long)$x0 == 0x%X) && ((unsigned long long)$x30 == 0x%X)"%(cockpit,rt(0x10036bc14))); bp.SetOneShot(True); print("bp",bp.GetID(),"Cockpit",hex(cockpit))
+script t=lldb.debugger.GetSelectedTarget(); m=next(t.GetModuleAtIndex(i) for i in range(t.GetNumModules()) if t.GetModuleAtIndex(i).GetFileSpec().GetFilename()=="MH Unite"); assert m.GetUUIDString().replace("-","").lower()=="58cc55c760ca3196b5d20c2aeb64b32b"; rt=lambda a:m.ResolveFileAddress(a).GetLoadAddress(t); err=lldb.SBError(); cockpit=t.GetProcess().ReadUnsignedFromMemory(rt(0x100732fc0),8,err); assert err.Success(); bp=t.BreakpointCreateByAddress(rt(0x10036a270)); bp.SetCondition("((unsigned long long)$x0 == 0x%X) && ((unsigned long long)$x30 == 0x%X)"%(cockpit,rt(0x10036bc14))); bp.SetOneShot(True); print("bp",bp.GetID(),"Cockpit",hex(cockpit))
 ```
 
 At the stop, record `x1`–`x5`, the backtrace, and the descriptor bytes. The
@@ -145,3 +145,269 @@ selector and destination rectangle that correspond visually to the
 half-visible hamburger, then determine whether the touch path references that
 same element or geometry. Do not infer identity from the shared Cockpit object
 alone, and do not patch until this link is demonstrated.
+
+## Phase 4 — Cockpit UI Rendering and Visual Identification
+
+### Objective
+
+Identify the rendering path responsible for the always-visible hamburger icon in Monster Hunter Freedom Unite iOS v1.00.11, with the eventual goal of moving it horizontally toward the physical right edge of the iPad display.
+
+The intended modification must preserve the icon's size, vertical position, partially visible appearance, and functional touch target.
+
+**Status:** The hamburger rendering path remains unidentified. However, we successfully traced and experimentally identified a menu navigation graphic.
+
+### Environment
+
+- Device: iPad Air 11-inch M2 (`iPad14,8`)
+- OS: iPadOS 18.7.3
+- Target binary: `MH Unite`
+- Mach-O UUID: `58CC55C7-60CA-3196-B5D2-0C2AEB64B32B`
+- Observed process ID: `29337`
+- Observed ASLR slide: `0xF78000`
+- Cockpit singleton pointer: `0x10706D500`
+
+Runtime addresses and pointers are specific to the observed debugging session. Resolve unslid addresses against the loaded module in future sessions.
+
+### 1. Confirmed Cockpit Descriptor Rendering
+
+An LLDB breakpoint at unslid `0x10036A270` successfully captured a call from the Cockpit renderer at `0x10036B960`.
+
+The descriptor at `0x16F78ECC8` contained:
+
+| Field | Value |
+|---|---|
+| `+0x00` | 1488 |
+| `+0x02` | 112 |
+| `+0x04` | 464 |
+| `+0x06` | 448 |
+| `+0x0B` | Type 1 |
+
+The dispatcher uses the low nibble of the type byte:
+
+- Types 0, 2, 4, 6 select atlas index `0x40`.
+- Types 1, 3, 5 select atlas index `0x9E`.
+
+Type 1 was confirmed to invoke atlas renderer `0x10036B42C`.
+
+The associated atlas record for index `0x9E` contained:
+
+`0000 00E8 0010 0008 8001 0000`
+
+This path appears compatible with multi-part panel rendering, but its specific visual identity was not established.
+
+### 2. Discovery of the "Menu" Text Renderer
+
+A separate invocation of the descriptor renderer was captured with:
+
+- Descriptor pointer: `0x16F78ECF8`
+- Additional data pointer: `0x16F78ED28`
+- Caller return address: unslid `0x1003A5A04`
+
+The descriptor contained:
+
+| Field | Value |
+|---|---|
+| `+0x00` | 1821 |
+| `+0x02` | 112 |
+| `+0x04` | 256 |
+| `+0x06` | 288 |
+| `+0x0B` | Type 3 |
+
+The additional data contained the null-terminated string:
+
+`20 20 4D 65 6E 75 00`
+
+This decodes to `"  Menu"`.
+
+The associated renderer begins at unslid `0x1003A5904` (runtime `0x10131D104`).
+
+The Cockpit dispatcher at `0x10037EDBC` calls this renderer when the byte at `Cockpit + 0x11B0` equals zero.
+
+Observed Cockpit state:
+
+| Offset | Value |
+|---|---|
+| `+0x11B0` | `0x00` |
+| `+0x11B4` | `0x02` |
+| `+0x11B5` | `0x01` |
+
+The function also constructs a page or selection indicator using the format string `%d/%d`.
+
+**Interpretation:** The rendering path is associated with the menu UI. The presence of `"  Menu"` does not establish that the function renders the hamburger icon.
+
+### 3. Additional Menu-Associated Graphics Path
+
+The Menu renderer calls another UI function at:
+
+`0x10036C870`
+
+This function formats additional text and selects between a direct graphics call and an animated graphics wrapper.
+
+The following path was confirmed dynamically:
+
+```text
+0x10037EDBC  Cockpit UI dispatcher
+      |
+      v
+0x1003A5904  "Menu" renderer
+      |
+      v
+0x10036C870  Additional UI renderer
+      |
+      v
+0x100379100  Animation wrapper
+      |
+      v
+0x1003788B8  Graphics helper
+      |
+      v
+0x100378D6C  Lower-level graphics helper
+```
+
+The animation wrapper uses `sin()` to calculate an 8-bit rendering parameter. Its exact visual meaning remains unconfirmed.
+
+The observed graphics-helper arguments were:
+
+| Argument | Value |
+|---|---:|
+| `x1` | 1821 |
+| `x2` | 134 |
+| `x3` | 228 |
+| `x4` | 32 |
+| `x5` | 145 |
+| `x6` | 32 |
+| `x7` | 240 |
+
+### 4. Coordinate Transformation
+
+The helper at `0x100378C40` calculates three output coordinates using input anchors and a game-provided scale factor.
+
+Observed outputs:
+
+| Output | Value |
+|---|---:|
+| Vertical coordinate | 120 |
+| Horizontal start | 1822 |
+| Horizontal end | 2161 |
+
+The horizontal span between the calculated endpoints is 339 internal coordinate units.
+
+These values are not confirmed physical screen coordinates.
+
+A subsequent graphics operation at `0x100378D6C` received:
+
+| Argument | Value |
+|---|---:|
+| X | 1822 |
+| Y | 120 |
+| Geometry argument 1 | 67 |
+| Geometry argument 2 | 67 |
+| Atlas index | 564 (`0x234`) |
+
+### 5. Atlas Record 564
+
+The atlas record was found at runtime address `0x1016A7B6C`.
+
+Its six 16-bit fields were:
+
+| Offset | Value |
+|---|---|
+| `+0x00` | `0x008A` |
+| `+0x02` | `0x00B9` |
+| `+0x04` | `0x0017` |
+| `+0x06` | `0x0017` |
+| `+0x08` | `0x8004` |
+| `+0x0A` | `0x000B` |
+
+The equal dimension fields initially made this a plausible small-icon candidate.
+
+The visual experiment below identified the relevant element more precisely.
+
+### 6. Reversible Runtime Position Experiment
+
+A repeating breakpoint was installed at unslid address:
+
+`0x100378D6C`
+
+Observed breakpoint ID: `10`.
+
+It was restricted to the call returning to runtime address `0x1012F0A3C` with atlas index 564 at incoming stack offset `+0x08`.
+
+```lldb
+breakpoint modify 10 --condition '($lr == 0x1012F0A3C) && (*(unsigned int *)($sp + 8) == 564)'
+```
+
+The Python breakpoint action replaced the incoming X coordinate:
+
+```python
+frame.FindRegister("x1").SetValueFromCString("1622")
+```
+
+Automatic continuation allowed repeated matching calls to execute with the modified coordinate.
+
+**Original X:** 1822  
+**Modified X:** 1622  
+**Translation:** −200 internal coordinate units
+
+#### Observed visual result
+
+The user confirmed that the **small circular background behind the menu's left navigation arrow moved horizontally**.
+
+The hamburger icon did not move.
+
+This is the first confirmed visual identification of a specific graphics call through runtime coordinate modification.
+
+The experiment demonstrates that the background graphic can be repositioned independently at this rendering callsite.
+
+It does **not** establish that atlas record 564 is exclusively associated with this graphic or that its interactive hitbox moves with it.
+
+#### Reversal
+
+The temporary effect can be disabled by interrupting the process and disabling breakpoint 10:
+
+```lldb
+process interrupt
+breakpoint disable 10
+continue
+```
+
+This experiment does not modify the IPA, executable on disk, repository files, or save data.
+
+### 7. Conclusions
+
+**Confirmed findings**
+
+1. The Cockpit UI uses a shared descriptor renderer at `0x10036A270`.
+2. The renderer supports multiple descriptor types and atlas-selection paths.
+3. A Cockpit-controlled rendering path constructs and renders `"  Menu"` text.
+4. The associated UI renderer calculates scaled positions and invokes lower-level graphics functions.
+5. A targeted, repeating LLDB coordinate modification successfully moved the left navigation arrow's circular background.
+6. The hamburger icon remained unaffected.
+
+**Unresolved questions**
+
+- Which function draws the hamburger graphic?
+- Which atlas entry or texture contains the hamburger?
+- Is its position calculated by Cockpit code or a separate UI layer?
+- Where is the hamburger's touch target defined?
+- Can the visual position and input region be translated consistently without modifying the rest of the UI?
+
+### 8. Recommended Next Investigation
+
+Use the **menu-closed state**, where the hamburger remains visible, as the baseline.
+
+Prioritize identifying rendering calls directly associated with that always-visible control.
+
+Avoid repeating investigations of the now-identified menu navigation-arrow background unless needed for comparison.
+
+A successful next milestone is a persistent, reversible LLDB coordinate modification that visibly moves the **hamburger itself**, without moving unrelated UI elements.
+
+After that, investigate its touch-input path separately before implementing a permanent patch.
+
+### Research Integrity
+
+These findings describe observed runtime behavior and static disassembly from the current investigation.
+
+Do not interpret candidate geometry fields, atlas metadata, or speculative graphics semantics as established facts without additional validation.
+
+Preserve the existing baseline IPA and research documents. Any future permanent patch should be developed and tested separately from the working baseline.
