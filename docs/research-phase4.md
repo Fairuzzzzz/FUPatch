@@ -411,3 +411,280 @@ These findings describe observed runtime behavior and static disassembly from th
 Do not interpret candidate geometry fields, atlas metadata, or speculative graphics semantics as established facts without additional validation.
 
 Preserve the existing baseline IPA and research documents. Any future permanent patch should be developed and tested separately from the working baseline.
+
+# Phase 4 — Menu Visual Layout and Hitbox Independence
+
+## Summary
+
+**Status: Experimentally verified**
+
+We successfully modified the Monster Hunter Freedom Unite iOS menu's rendering coordinates through LLDB.
+
+Changing the resolved X coordinate from `1821` to `1221` moved the **entire menu visually** by 600 coordinate units to the left.
+
+However, the menu's touch hitboxes remained at their original positions.
+
+This demonstrates that modifying the tested render-time layout coordinate does not automatically update the corresponding interaction regions.
+
+## 1. Environment
+
+| Property | Value |
+|---|---|
+| Application | Monster Hunter Freedom Unite iOS v1.00.11 |
+| Device | iPad Air M2 |
+| Operating system | iPadOS 18.7.3 |
+| Process ID | `29337` |
+| Mach-O UUID | `58cc55c760ca3196b5d20c2aeb64b32b` |
+| ASLR slide | `0xF78000` |
+| Runtime image base | `0x100F78000` |
+| Debugger | LLDB |
+
+All experiments modified temporary process memory. No IPA or executable changes were made.
+
+Runtime addresses are valid for the recorded process and must be recalculated if the ASLR slide changes.
+
+## 2. Relevant Functions and Addresses
+
+| Function / location | Unslid address | Runtime address |
+|---|---|---|
+| Cockpit dispatcher | `0x10037EDBC` | `0x1012F6DBC` |
+| Menu renderer | `0x1003A5904` | `0x10131D104` |
+| Coordinate resolver | `0x10039DAD4` | `0x1013152D4` |
+| Menu coordinate consumption | `0x1003A51C0` | `0x10131D1C0` |
+| UI descriptor builder | `0x10039DB98` | `0x101315398` |
+| Lower-level graphics helper | `0x100378D6C` | `0x1012F0D6C` |
+
+### Layout entry 98
+
+The Menu renderer requests layout entry `0x62` (decimal 98).
+
+Table record address:
+
+`0x1015405B0`
+
+Recorded bytes:
+
+`63 00 00 00 F6 FE 46 00`
+
+Decoded fields:
+
+- Base-position index: `99`
+- X offset: `-266`
+- Y offset: `+70`
+
+The coordinate resolver combines a base position with scaled offsets to produce the coordinates consumed by the Menu renderer.
+
+### Observed resolved coordinates
+
+| Coordinate | Original value |
+|---|---|
+| X | `1821` |
+| Y | `112` |
+
+The returned coordinates are stored in the Menu renderer's stack frame.
+
+At runtime `0x10131D1C0`, the relevant instructions are:
+
+```asm
+ldrsh w4, [sp, #0x1c]  ; Y coordinate
+ldrsh w3, [sp, #0x1e]  ; X coordinate
+```
+
+This provides a convenient location for reversible coordinate experiments.
+
+## 3. Experiment A — Individual Sprite Movement
+
+**Target:** Lower-level graphics helper `0x100378D6C`
+
+The earlier breakpoint targeted a draw operation with:
+
+- Atlas index: `564` (`0x234`)
+- Geometry: `67 × 67`
+- Original X argument: `1822`
+- Modified X argument: `1622`
+
+### Observed result
+
+Moving this draw operation shifted the **circular background of the menu's left navigation arrow**.
+
+The arrow glyph itself did not follow the background movement.
+
+The corresponding touch hitbox remained at its original location.
+
+**Conclusion:** This graphics call controls an individual visual component rather than the entire interactive navigation control.
+
+## 4. Experiment B — Entire Menu Visual Movement
+
+**Target:** Menu renderer at runtime `0x10131D1C0`
+
+Breakpoint ID: `14`
+
+The breakpoint intercepts execution immediately after the coordinate resolver returns, before the resolved coordinates are loaded into registers for subsequent rendering operations.
+
+### Original and modified coordinates
+
+| Property | Original | Modified |
+|---|---:|---:|
+| X coordinate | 1821 | 1221 |
+| Y coordinate | 112 | 112 (unchanged) |
+| X displacement | — | −600 |
+
+### Breakpoint configuration
+
+The experiment used the following condition:
+
+```lldb
+breakpoint modify 14 --condition '*(unsigned long long *)($x29 + 8) == 0x1012F6E24'
+```
+
+This compares the saved return address rather than the live `x30` register, which may have been overwritten by an intervening function call.
+
+The working breakpoint command was:
+
+```lldb
+breakpoint command add -s python -o 'p=lldb.debugger.GetSelectedTarget().GetProcess(); fs=[th.GetFrameAtIndex(0) for th in p if th.GetStopReason()==lldb.eStopReasonBreakpoint and th.GetNumFrames()>0]; fs=[f for f in fs if f.GetPC()==0x10131D1C0]; e=lldb.SBError(); n=p.WriteMemory(fs[0].GetSP()+0x1e,(1221).to_bytes(2,"little"),e) if fs else 0; print("Layout X write:",n,"bytes; success:",e.Success())' 14
+```
+
+The command selects a frame stopped at the target PC and writes a two-byte little-endian value to the stack location containing X.
+
+### Successful LLDB verification
+
+Recorded callback output:
+
+```text
+Layout X write: 2 bytes; success: True
+```
+
+Breakpoint stop:
+
+```text
+thread #4, stop reason = breakpoint 14.1
+PC = 0x10131D1C0
+```
+
+Memory verification:
+
+```lldb
+memory read --format d --size 2 --count 1 `$sp+0x1e`
+```
+
+Result:
+
+```text
+0x16f78ecee: 1221
+```
+
+This confirms that the intended stack coordinate was successfully modified during execution.
+
+### Repeating the modification
+
+After validation, the breakpoint was configured to continue automatically:
+
+```lldb
+breakpoint modify --auto-continue true 14
+continue
+```
+
+This reapplies the modified coordinate on subsequent matching breakpoint hits.
+
+### Observed visual result
+
+**The entire menu's visual content moved.**
+
+Unlike Experiment A, which affected only the arrow's circular background, this higher-level coordinate change visibly displaced the menu as a whole.
+
+### Observed interaction result
+
+**The menu's touch hitboxes did not move with the visual elements.**
+
+This was observed through user interaction with the displaced menu.
+
+The visual displacement therefore does not constitute a complete relocation of the interactive interface.
+
+## 5. LLDB Callback Troubleshooting
+
+Two earlier Python callbacks failed or did not modify the intended coordinate.
+
+### Attempt 1 — `lldb.frame`
+
+The command relied on:
+
+```python
+f = lldb.frame
+```
+
+It repeatedly generated:
+
+```text
+AttributeError: 'NoneType' object has no attribute 'GetThread'
+```
+
+The callback did not have a valid frame through this variable.
+
+### Attempt 2 — Selected thread
+
+The next callback used:
+
+```python
+p.GetSelectedThread().GetFrameAtIndex(0)
+```
+
+Although breakpoint 14 triggered, inspection showed that the coordinate remained `1821`.
+
+The selected thread was not a reliable substitute for the actual breakpoint-hit thread.
+
+### Working approach
+
+The successful callback searched process threads for a breakpoint stop reason and matched the current frame's PC against `0x10131D1C0`.
+
+This located the appropriate frame in the observed execution.
+
+**Important:** The callback was verified in this debugging session; it is not a universal guarantee for every LLDB thread-selection or simultaneous-stop scenario.
+
+## 6. Interpretation
+
+The combined experiments establish three useful facts:
+
+1. Individual menu graphics can be repositioned by modifying arguments to lower-level drawing functions.
+2. A higher-level resolved layout coordinate can control the visual position of the entire menu.
+3. The tested drawing-coordinate modifications do not reposition the corresponding touch hitboxes.
+
+The evidence is consistent with rendering and interaction using independently calculated or stored positioning information.
+
+However, we have **not yet identified the function responsible for constructing or evaluating the menu hitboxes**.
+
+It is therefore premature to conclude that the game universally uses two separate layout tables.
+
+## 7. Remaining Questions
+
+The next investigation should determine:
+
+- Where the menu's interactive rectangles or touch regions are defined.
+- Whether input handling retrieves layout entry 98 independently.
+- Whether interaction coordinates are calculated from another table, from cached geometry, or from hardcoded constants.
+- Whether a shared upstream value can reposition both visuals and hitboxes.
+- How these findings relate to the always-visible hamburger menu control.
+
+The hamburger control remains the ultimate target; the opened menu serves as an experimental case for understanding the UI architecture.
+
+## 8. Reverting the Experiment
+
+To stop repeatedly modifying the layout coordinate:
+
+```lldb
+process interrupt
+breakpoint disable 14
+continue
+```
+
+The original layout is recalculated during subsequent rendering calls.
+
+No permanent modification to the application binary is required.
+
+## 9. Final Finding
+
+**Confirmed:** The menu's visual position can be changed at a high-level coordinate-consumption point without changing its hitboxes.
+
+**Not yet resolved:** The input-side coordinate source required to relocate the interactive regions.
+
+**Next research direction:** Trace menu hitbox calculation and determine its relationship, if any, to the existing layout-coordinate resolver.
