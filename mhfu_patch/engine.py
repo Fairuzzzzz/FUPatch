@@ -350,8 +350,9 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
 
     _emit(on_event, 'write', 25, 'starting')
     try:
-        res = ziprewrite.rewrite(ipa_path, tmp, replacements, removals_b,
-                                 additions, progress=zip_progress)
+        res = ziprewrite.rewrite(
+            ipa_path, tmp, replacements, removals_b, additions,
+            progress=zip_progress)
         _emit(on_event, 'verify', 93, 're-checking binary in output')
         back = ziprewrite.read_member(tmp, info['exe_member'])
         back_slice = macho.extract(back, macho.find_arm64(macho.analyze(back)))

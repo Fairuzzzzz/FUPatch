@@ -30,9 +30,15 @@ profiles only override the safe-area and UI-scale constants.
 - 11 old members removed (`LaunchImage*`, `_CodeSignature/*`, `iTunesArtwork`,
   `iTunesMetadata.plist`, `.ZipComment`)
 - 1 member added (`LaunchScreen.storyboard`)
-- the other 14,201 members are copied as-is
+- the other 14,201 member payloads are copied as-is
 
 The source version is kept; `--version` can override it for CLI builds.
+
+Normal patching preserves ZIP local extra fields. The optional
+`mhfu_patch.ziprewrite.rewrite(..., normalize_local_extras=True)` operation is
+for explicit archive maintenance only; it is not used by patching or native
+iPad conversion and is not required for the verified MHFU iPad baseline.
+ZIP64 archives are unsupported.
 
 ## Requirements
 
