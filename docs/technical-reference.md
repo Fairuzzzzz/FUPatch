@@ -31,24 +31,27 @@ embedded PVR v2 textures were reconstructed and decoded as PVRTC 4-bpp
 | `cock-4` | 1024×1024 |
 | `cock-5` | 2048×2048 |
 
-The decoder was Imagination/PowerVR's `PVRTDecompressPVRTC` C++ routine through
+The historical decoder was Imagination/PowerVR's `PVRTDecompressPVRTC` C++ routine through
 a temporary wrapper. The PNGs and a labeled contact sheet were kept in
 temporary storage. The IPA, `.tmh`, and game binaries were not modified.
 
 Previously unsuccessful or excluded conversion paths:
 
-- `PVRTexToolCLI` was absent.
+- `PVRTexToolCLI` was absent during the earlier conversion attempt; the later corrected extraction used PVRTexTool.
 - ImageMagick, FFprobe, and macOS `sips` did not decode the PVR files.
 - `texture2ddecoder` was not used in-process because its README warns of
   possible macOS crashes.
 - No decoder dependency was installed in the project.
 
+### Corrected extraction and superseded geometry
+
+The subsequent corrected PVRTexTool extraction identifies the hamburger in `cock-5` at `(890, 593, 102, 142)`. The earlier temporary-wrapper image was incorrectly decoded for coordinate analysis. The old 2× vertical preview convention is superseded; it does not establish a game rendering multiplier. Use corrected, unscaled images and coordinates. The exact PVRTexTool command, version, corrected image dimensions and output hashes were not supplied with this update; record them when available. The dimensions table above records the historical extraction.
+
 ## Hamburger source bounds and atlas records
 
-The visibly identifiable hamburger in `cock-5` has tight visible bounds
-**(X=1804, Y=604, width=187, height=119)**.
+The corrected visible bounds in `cock-5` are **(X=890, Y=593, width=102, height=142)**. These are not necessarily full sprite bounds. The earlier `(1804, 604, 187, 119)` measurement is superseded.
 
-Four 12-byte records from the atlas table at `0x10072E0FC` are candidates:
+Four 12-byte records from the atlas table at `0x10072E0FC` were former candidates (historical evidence only):
 
 | Index | Record address | X | Y | W | H | Flags | Resource field |
 |---:|---:|---:|---:|---:|---:|---:|---:|
@@ -57,16 +60,11 @@ Four 12-byte records from the atlas table at `0x10072E0FC` are candidates:
 | 208 | `0x10072EABC` | 224 | 80 | 16 | 16 | `0x8000` | 11 |
 | 209 | `0x10072EAC8` | 240 | 80 | 16 | 16 | `0x8000` | 11 |
 
-The four rectangles are adjacent cells in the table's regular 16-unit grid.
-The following is **hypothetical**: if logical coordinates map to the 2048-pixel
-texture at 8×, their union is `(1792, 512, 256, 256)`, which contains the
-visible icon. The union also contains unrelated pixels. No evidence yet proves
-that the renderer uses this scale against `cock-5`.
+The four rectangles are adjacent cells in the table's regular 16-unit grid. Under the hypothetical 8× mapping, their union is `(1792, 512, 256, 256)`. This overlapped the incorrectly decoded image's hamburger bounds but does not overlap the corrected bounds. Their original justification is invalid; they are unsupported hamburger candidates, not universally excluded by runtime evidence.
 
-The records are confirmed as four distinct table entries, not as one
-hamburger-sized entry. Existing evidence does not determine whether their
-semantics are tiles, independent sprites, or another atlas layout. It also
-does not prove that they are rendered together.
+Under the same unverified conversion, the corrected bounds in table units would be `(111.25, 74.125, 12.75, 17.75)` (X approximately 111–124, Y approximately 74–92). Search overlapping records under plausible mappings, allowing for padding and other coordinate systems. No new index is confirmed.
+
+The records are four distinct entries. Their semantics, whether they render together, the table's relationship to `cock-5`, and the coordinate conversion remain unverified.
 
 ## ResourceManager and texture selection
 
@@ -80,10 +78,10 @@ Relevant Ghidra functions:
 | `FUN_10035EE00` / `FUN_10035EE14` | Look up or populate a Cockpit texture-manager cache slot selected by `resource_id & 0xF`; key 11 maps to slot 11. |
 | `FUN_10035D968` | Retrieves a texture by sub-index from the loaded resource. |
 
-For candidate records 204/205/208/209, Ghidra establishes **ResourceManager
+For former candidate records 204/205/208/209, Ghidra establishes **ResourceManager
 key 11 and texture sub-index 0**. It does not establish that key 11 is
 `cock.tmh`, or that sub-index 0 is `cock-5`. The `.tmh` member's presence and
-its five decoded textures do not provide that registration crosswalk.
+its five decoded textures do not provide that registration crosswalk. Key 11 and sub-index 0 are not established as the hamburger's resource or texture selection.
 
 ## Rendering helpers and call-site limits
 
@@ -95,11 +93,11 @@ its five decoded textures do not provide that registration crosswalk.
 | `FUN_10036A270` | Descriptor-driven Cockpit dispatcher; selected descriptor types reach `FUN_10036B42C`. |
 | `FUN_10037A9B0` | Alternate panel/skin path with a separate table at `0x10072E7D8`; lower-priority hamburger candidate. |
 
-The enumerated direct callers of `FUN_10036C920` and `FUN_100375804` did not
+The historical search of enumerated direct callers of `FUN_10036C920` and `FUN_100375804` did not
 establish a selection of indices 204, 205, 208, or 209. This is a bounded
 direct-call result; it does not rule out other table-indexing helpers,
 unresolved dynamic indices, or indirect calls. The hamburger-specific draw
-call remains unknown.
+call remains unknown. Reevaluate the table using the corrected bounds rather than prioritizing the former four indices; confirm resource mapping, draw-path usage, and ownership by a reversible position change.
 
 ## Historical coordinate and input evidence
 

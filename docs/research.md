@@ -6,15 +6,9 @@ confirmed.
 
 ## Current result
 
-The hamburger graphic is visually identified in the fifth decoded Cockpit
-texture, `cock-5` (2048×2048). Its visible source bounds are **(1804, 604,
-187, 119)**. This identifies the pixels in the texture, not the game call that
-draws them or the input region that activates them.
+The corrected PVRTexTool extraction identifies the hamburger in `cock-5`, with visible source bounds **(890, 593, 102, 142)**. These are visible pixels, not necessarily the complete sprite rectangle, draw call, or hitbox.
 
-The matching four candidate rows in the atlas table at `0x10072E0FC` are
-indices **204, 205, 208, and 209**. They are separate 16×16 records with
-resource field 11. An 8× mapping makes their combined region contain the
-hamburger, but the scale and relationship to `cock-5` are not proven.
+The earlier extraction bounds `(1804, 604, 187, 119)` are superseded. Former atlas candidates **204, 205, 208, and 209** at `0x10072E0FC` no longer have a coordinate-fit justification. No replacement atlas index is confirmed.
 
 ## Confirmed findings
 
@@ -22,55 +16,29 @@ hamburger, but the scale and relationship to `cock-5` are not proven.
   `25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4`.
 - Offline analysis used REA 6.10.1 / Ghidra 12.2 on Intel macOS (`x86_64`).
 - `cockpit/cock.tmh` was extracted read-only from the baseline IPA. Five
-  embedded PVR v2 PVRTC 4-bpp textures were decoded to PNG using PowerVR's
-  `PVRTDecompressPVRTC` routine in a temporary wrapper. No game binary was
-  modified.
+  embedded PVR v2 PVRTC 4-bpp textures were identified. The earlier PNG decoding used PowerVR's `PVRTDecompressPVRTC` routine in a temporary wrapper; its image geometry is superseded by the corrected PVRTexTool extraction. The historical extraction did not modify the game binary.
 - Ghidra's `FUN_100375FD4` and `FUN_1003762B4` show that records with flags
   `0x8000` use a ResourceManager key and the low 12 flag bits as texture
-  sub-index. For the four candidates this is key 11 and sub-index 0.
+  sub-index. For the four former candidates this is key 11 and sub-index 0; neither is confirmed for the hamburger.
 - The atlas-564 draw changed the circular background behind the left
   navigation arrow, not the hamburger. The generic rectangle-test candidate
   and accepted-event branch were not reached during the confirmed activation.
 
 ## Hypotheses
 
-- Treating table coordinates as 8× texture pixels produces a 2×2 region at
-  `(1792, 512, 256, 256)` that contains the hamburger. It also contains
-  unrelated surrounding pixels. This is a coordinate-fit hypothesis, not
-  proof of the renderer's sampling scale.
-- The 16×16 records look like cells in a regular atlas grid. Existing evidence
-  does not establish whether they are texture tiles, independent sprites, or
-  another atlas representation.
+- Under the unverified 8× mapping, corrected visible bounds correspond to `(111.25, 74.125, 12.75, 17.75)` in table units (X approximately 111–124, Y approximately 74–92). Search overlapping records, allowing for padded bounds and other plausible mappings.
+- The former four records map to `(1792, 512, 256, 256)` under that same assumption and do not overlap the corrected icon. They are unsupported, not universally excluded by runtime evidence.
+- The table's relationship to `cock-5`, coordinate scale, and record semantics (tiles, independent sprites, or another representation) remain unverified.
 
 ## Blockers and next action
 
-- **Resource ID 11 → `cock.tmh` → `cock-5` remains unresolved.** Ghidra shows a
-  key lookup and texture sub-index selection, but not the resource registration
-  that binds key 11 to the `.tmh` member and one of its five textures.
+- **ResourceManager key 11 → `cock.tmh` → `cock-5` remains unresolved.** The known key/sub-index behavior is valid for the former records but does not establish the hamburger's resource.
 - The hamburger-specific draw call and touch region remain unidentified.
-- **Next:** trace `cock.tmh` resource registration and determine how key 11 and
-  texture sub-indices map to the five embedded textures. Then return to the
-  candidate atlas rows and identify the icon-specific draw and input paths.
+- **Next:** conduct a fresh atlas candidate search using corrected bounds and independently trace resource registration and texture selection. Verify candidate usage during hamburger rendering and confirm ownership with a reversible draw-position change before pursuing the hitbox or persistent patch.
 
-### Cockpit texture aspect-ratio observation
+### Superseded texture aspect-ratio observation
 
-**Status:** Visually verified; underlying cause unconfirmed.
-
-The five cockpit textures extracted from `cock.tmh` appear vertically compressed when viewed as raw PNGs.
-
-A comparison of `cock-5` at its original proportions, 1.5× height, and 2× height showed that the **2× vertically stretched version closely resembles the graphics displayed in-game**, particularly the circular controller-button icons.
-
-This suggests an approximately 2:1 difference between the extracted texture proportions and their intended visual presentation.
-
-Possible explanations include:
-
-- Intentional vertical scaling during game rendering.
-- Texture or sprite metadata specifying different display proportions.
-- An issue in the PVR reconstruction or extraction pipeline.
-
-**Working convention:** Use 2× vertically scaled previews when visually identifying cockpit artwork. Preserve the original extracted PNGs and their coordinates for all technical analysis.
-
-This observation does not establish a renderer scale factor or change the confidence assigned to candidate hamburger atlas indices.
+The earlier 2× vertical preview convention was based on the incorrectly decoded texture. The corrected PVRTexTool extraction supersedes it. Do not use the old preview geometry or infer an intentional 2× renderer multiplier. Preserve historical images as historical evidence; use corrected, unscaled images for current analysis.
 
 ## Historical leads and exclusions
 

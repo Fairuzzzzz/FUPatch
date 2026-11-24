@@ -85,87 +85,29 @@ Existing historical reports should be preserved rather than rewritten to match n
 
 ## 4. Current Research Status
 
-### 4.1 Hamburger source image identified
+### 4.1 Corrected hamburger source image
 
-The hamburger graphic has been visually identified in the fifth decoded Cockpit texture:
+The hamburger is visually identified in `cock-5`, the fifth texture extracted from `Payload/MH Unite.app/cockpit/cock.tmh`.
 
-**Texture:** `cock-5`  
-**Dimensions:** 2048 × 2048  
-**Visible hamburger bounds:** `(1804, 604, 187, 119)`
+**Current visible source bounds:** `(890, 593, 102, 142)` (X, Y, width, height), measured on the corrected PVRTexTool extraction. These are visible pixel bounds, not necessarily the complete sprite rectangle.
 
-The image was extracted from:
+The earlier bounds `(1804, 604, 187, 119)` came from an incorrectly decoded image and are superseded. The earlier 2× vertical preview convention is also superseded; it is not evidence of intentional renderer scaling. Use the corrected, unscaled extraction for visual and coordinate analysis.
 
-`Payload/MH Unite.app/cockpit/cock.tmh`
+Identifying the source pixels does not identify the rendering instruction. See [technical-reference.md](technical-reference.md) for historical extraction details.
 
-The `.tmh` resource contains five embedded PVR v2 textures, decoded using PowerVR's `PVRTDecompressPVRTC` routine.
+### 4.2 Atlas candidates require reevaluation
 
-The extraction and decoding process did not modify the baseline IPA.
+The previous candidates 204, 205, 208, and 209 in the table at `0x10072E0FC` were selected using the incorrect source bounds. Their union under the hypothetical 8× mapping is `(1792, 512, 256, 256)`, which does not overlap the corrected bounds.
 
-**Important:** Identifying the source pixels does not identify the executable instruction that renders them.
+These entries are now unsupported hamburger candidates, not globally ruled out by runtime evidence. Do not prioritize them without independent evidence.
 
-### Cockpit texture display proportions
+If the unverified 8× mapping applies, the corrected bounds correspond to approximately `(111.25, 74.125, 12.75, 17.75)` in table units. Use this only as a fresh search hypothesis; padded sprite bounds and other mappings remain possible.
 
-The extracted cockpit textures appear vertically squashed compared with their in-game appearance.
+### 4.3 ResourceManager mapping remains unresolved
 
-Visual comparisons indicate that stretching `cock-5` to **200% of its original height**, without changing its width, produces artwork closely resembling the game's UI.
+Static analysis of the former candidates established ResourceManager key 11 and texture sub-index 0 for their flagged rendering path. This remains valid for those records, but does not establish that the hamburger uses either value.
 
-This is a useful visual-reference convention, not a confirmed property of the rendering pipeline.
-
-For future investigations:
-
-- Preserve raw texture PNGs unchanged.
-- Use 2×-height preview copies for visual comparison.
-- Continue using original texture coordinates for atlas analysis.
-- Do not assume that the game uses a 2× vertical rendering multiplier until verified through sprite geometry or rendering code.
-
-The hamburger's currently recorded source bounds `(1804, 604, 187, 119)` refer to the **raw extracted texture**, not the vertically stretched preview.
-
-The texture aspect-ratio observation does not confirm atlas indices 204, 205, 208, or 209.
-
-### 4.2 Candidate atlas entries
-
-Four records in the atlas table at unslid address `0x10072E0FC` have been identified as candidates:
-
-| Index | X | Y | W | H |
-|---|---:|---:|---:|---:|
-| 204 | 224 | 64 | 16 | 16 |
-| 205 | 240 | 64 | 16 | 16 |
-| 208 | 224 | 80 | 16 | 16 |
-| 209 | 240 | 80 | 16 | 16 |
-
-Each record has resource field `11` and flags `0x8000`.
-
-A hypothetical 8× coordinate conversion makes their combined region contain the hamburger's visible pixels.
-
-However, the scale, record semantics, and relationship to the actual draw call remain unproven.
-
-**Do not treat these records as confirmed hamburger sprites.**
-
-### 4.3 Current ResourceManager blocker
-
-Static analysis established that the flagged atlas-rendering path uses:
-
-- ResourceManager key `11`.
-- Texture sub-index `0`.
-- Cockpit texture loading and caching routines.
-
-Relevant functions include:
-
-| Function | Role |
-|---|---|
-| `0x100375FD4` | Resource lookup and texture selection |
-| `0x1003762B4` | Atlas record consumption |
-| `0x1002C2138` | ResourceManager key lookup |
-| `0x10035EE00` / `0x10035EE14` | Cockpit texture cache |
-| `0x10035D968` | Texture sub-index retrieval |
-
-The missing relationship is:
-
-**ResourceManager key 11 → registered resource → `cock.tmh` → embedded texture**
-
-Neither the association with `cock.tmh` nor the relationship between sub-index 0 and `cock-5` has been confirmed.
-
-This is the main blocker in the latest static-analysis research.
+The relationship **ResourceManager key 11 → registered resource → `cock.tmh` → embedded texture** remains unverified. Independently establish the actual resource and texture mapping and the atlas table's relationship to `cock-5`. Relevant functions and evidence are in the technical reference.
 
 ## 5. Confirmed Cockpit and Input Findings
 
@@ -308,7 +250,7 @@ The following are unresolved:
 
 1. Does ResourceManager key 11 actually reference `cock.tmh`?
 2. Which embedded texture corresponds to the relevant sub-index?
-3. Do atlas entries 204, 205, 208, and 209 contribute to hamburger rendering?
+3. Does the atlas table describe source rectangles in `cock-5`, and which records, if any, match the corrected bounds?
 4. Which executable instruction draws the persistent hamburger?
 5. Which touch-input region activates it?
 6. Where does its horizontal coordinate originate?
@@ -319,9 +261,9 @@ Do not infer answers from spatial coincidence or unrelated UI controls.
 
 ## 9. Recommended Research Direction
 
-**Primary next step:** Resolve the ResourceManager registration chain for key 11 and determine its relationship to the Cockpit texture resource.
+**Primary next steps:** Perform a fresh atlas search using the corrected source bounds under explicitly labeled plausible coordinate mappings, and independently trace ResourceManager registration and texture selection, including key 11.
 
-Then investigate whether the candidate atlas records participate in hamburger rendering.
+Prioritize records only when supported by texture mapping and draw-path evidence; do not resume the former four candidates solely because of their old coordinate fit.
 
 If the static mapping proves inconclusive, use Phase 7's confirmed menu-state transition to perform targeted runtime comparisons between hamburger-visible and menu-open states.
 
@@ -358,7 +300,7 @@ Read `docs/PROJECT_HANDOFF.md`, `docs/research.md`, and `docs/technical-referenc
 
 The objective is to relocate the persistent hamburger menu icon in Monster Hunter Freedom Unite iOS 1.00.11 to the appropriate right-edge position on an iPad Air M2 while preserving size, vertical position, partial clipping, and touch functionality.
 
-The hamburger's source pixels have been located in `cock-5`, and atlas entries 204, 205, 208, and 209 are candidates. However, the mapping between ResourceManager key 11, `cock.tmh`, and texture sub-index 0 remains unresolved.
+The corrected PVRTexTool extraction locates the hamburger in `cock-5` at `(890, 593, 102, 142)`. The former atlas candidates 204, 205, 208, and 209 have lost their coordinate-fit justification; the earlier 2× vertical scaling hypothesis is superseded. Perform a fresh atlas search and independently verify resource-to-texture mapping. The 8× coordinate conversion and the mapping between ResourceManager key 11, `cock.tmh`, and texture sub-index 0 remain unresolved.
 
 The hamburger's actual rendering call and touch region have not been confirmed.
 
