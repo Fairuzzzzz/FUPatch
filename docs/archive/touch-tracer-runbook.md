@@ -1,4 +1,7 @@
-# MHFU LLDB Touch Tracer
+# Archived: MHFU LLDB Touch Tracer Runbook
+
+This runbook is retained for historical reproducibility. The current
+hamburger-specific hitbox remains unresolved; see [research.md](../research.md).
 
 This script records touch-entry registers, selected `CGPoint` return registers,
 thread IDs, and shallow call stacks. Its optional native hit-test mode traces

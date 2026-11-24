@@ -1,4 +1,8 @@
-# MHFU UI research — Phase 5: Current-session diagnostics and draw probe
+# Archived: Current-session diagnostics and draw probe
+
+The source filename called this “Phase 8” while its title called it “Phase 5”.
+It is retained under a descriptive filename to avoid perpetuating that
+numbering mismatch. Current status is in [research.md](../research.md).
 
 **Scope:** Read-only device checks and local LLDB-script validation. No
 breakpoint was installed on the iPad, no game memory was written, and no app,

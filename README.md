@@ -251,3 +251,12 @@ except `Info.plist`, identical executable sha256, identical plist keys.
   armv7 slice (unpatched).
 - The browser engine requires a binary `Info.plist` and does not support ZIP64
   input.
+
+## Research documentation
+
+The separate UI reverse-engineering work has not produced a hamburger position
+patch. Its current status is in [docs/research.md](docs/research.md); detailed
+addresses, atlas/resource notes, and historical evidence are in
+[docs/technical-reference.md](docs/technical-reference.md). Superseded reports
+are retained under [docs/archive/](docs/archive/), and raw diagnostic output
+under [docs/logs/](docs/logs/).
