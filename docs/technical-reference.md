@@ -173,3 +173,17 @@ Selected REA evidence identifiers retained during the offline pass:
   `ev_6a815e9e1bb88000fb093ed2b6600bfe067747e67e4249e21eb4292efd21ad88`,
   `ev_62afcd3928c051477e80af57190236ca0327429d58ad018d7337ac369e865128`,
   `ev_bffb0dc2dac1096cc5ffc8d9a99a0b269b6e68c4f3b41dabd4fccebfb917e5a5`
+
+### Corrected texture extraction and known limitations
+
+The revised PVR texture decoding was performed using PVRTexTool 5.7.1 (Build `26.1@f61b9fab2511`), with PVRTexLib v5.7.1.
+
+The resulting PNGs appear to preserve the correct spatial arrangement and proportions of the UI artwork. However, visible color abnormalities remain, and the decoding should not be considered fully accurate.
+
+The hamburger's measured visible source bounds in `cock-5` are `(890, 593, 102, 142)`. These coordinates supersede the previous measurements but remain provisional until corroborated by atlas or rendering evidence.
+
+The decoded textures are intended as spatial references for reverse engineering, not as production-ready replacement assets.
+
+Because the current project objective is to relocate existing UI elements rather than reconstruct or replace their artwork, resolving the remaining color abnormalities is not a research priority.
+
+Further decoding investigation is warranted only if additional evidence suggests that the remaining inaccuracies affect texture geometry, source coordinates, or atlas interpretation.

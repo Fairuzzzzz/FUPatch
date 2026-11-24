@@ -8,6 +8,16 @@ The web UI patches the IPA **entirely in the browser**: the file never leaves
 the machine, nothing is uploaded, and no server CPU is used. A Python CLI is
 included for automation.
 
+### Disclaimer
+
+This repository contains extracted assets from the original game, published solely for **research and educational purposes**.
+
+All rights, titles, and interests in the original game and its assets belong to their respective copyright holders.
+
+**Full credit goes to Capcom and the original developers and creators.**
+
+This project is unofficial and is not affiliated with, endorsed by, or sponsored by the original copyright holders.
+
 ## What the patch changes
 
 | feature                                  | example change |
