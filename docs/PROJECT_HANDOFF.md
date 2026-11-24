@@ -103,6 +103,25 @@ The extraction and decoding process did not modify the baseline IPA.
 
 **Important:** Identifying the source pixels does not identify the executable instruction that renders them.
 
+### Cockpit texture display proportions
+
+The extracted cockpit textures appear vertically squashed compared with their in-game appearance.
+
+Visual comparisons indicate that stretching `cock-5` to **200% of its original height**, without changing its width, produces artwork closely resembling the game's UI.
+
+This is a useful visual-reference convention, not a confirmed property of the rendering pipeline.
+
+For future investigations:
+
+- Preserve raw texture PNGs unchanged.
+- Use 2×-height preview copies for visual comparison.
+- Continue using original texture coordinates for atlas analysis.
+- Do not assume that the game uses a 2× vertical rendering multiplier until verified through sprite geometry or rendering code.
+
+The hamburger's currently recorded source bounds `(1804, 604, 187, 119)` refer to the **raw extracted texture**, not the vertically stretched preview.
+
+The texture aspect-ratio observation does not confirm atlas indices 204, 205, 208, or 209.
+
 ### 4.2 Candidate atlas entries
 
 Four records in the atlas table at unslid address `0x10072E0FC` have been identified as candidates:

@@ -52,6 +52,26 @@ hamburger, but the scale and relationship to `cock-5` are not proven.
   texture sub-indices map to the five embedded textures. Then return to the
   candidate atlas rows and identify the icon-specific draw and input paths.
 
+### Cockpit texture aspect-ratio observation
+
+**Status:** Visually verified; underlying cause unconfirmed.
+
+The five cockpit textures extracted from `cock.tmh` appear vertically compressed when viewed as raw PNGs.
+
+A comparison of `cock-5` at its original proportions, 1.5× height, and 2× height showed that the **2× vertically stretched version closely resembles the graphics displayed in-game**, particularly the circular controller-button icons.
+
+This suggests an approximately 2:1 difference between the extracted texture proportions and their intended visual presentation.
+
+Possible explanations include:
+
+- Intentional vertical scaling during game rendering.
+- Texture or sprite metadata specifying different display proportions.
+- An issue in the PVR reconstruction or extraction pipeline.
+
+**Working convention:** Use 2× vertically scaled previews when visually identifying cockpit artwork. Preserve the original extracted PNGs and their coordinates for all technical analysis.
+
+This observation does not establish a renderer scale factor or change the confidence assigned to candidate hamburger atlas indices.
+
 ## Historical leads and exclusions
 
 The atlas-564 navigation-arrow experiment, the descriptor/dispatcher candidates,
