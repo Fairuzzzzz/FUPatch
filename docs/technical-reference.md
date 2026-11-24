@@ -43,9 +43,18 @@ Previously unsuccessful or excluded conversion paths:
   possible macOS crashes.
 - No decoder dependency was installed in the project.
 
-### Corrected extraction and superseded geometry
+### Revised extraction and limitations
 
-The subsequent corrected PVRTexTool extraction identifies the hamburger in `cock-5` at `(890, 593, 102, 142)`. The earlier temporary-wrapper image was incorrectly decoded for coordinate analysis. The old 2× vertical preview convention is superseded; it does not establish a game rendering multiplier. Use corrected, unscaled images and coordinates. The exact PVRTexTool command, version, corrected image dimensions and output hashes were not supplied with this update; record them when available. The dimensions table above records the historical extraction.
+PVRTexTool 5.7.1 (Build `26.1@f61b9fab2511`), PVRTexLib v5.7.1, Qt 6.8.1. Spatial arrangement appears correct, but visible color abnormalities remain. Use unscaled PNGs as provisional spatial references only; fixing color is not a priority unless it affects geometry or identification. Exact extraction commands/settings, revised dimensions and output hashes are not recorded. The dimensions table above is historical. The prior `(1804,604,187,119)` bounds and 2× vertical stretching convention are superseded.
+
+| Artwork in `cock-5` | Visible bounds (X, Y, W, H) | Composition |
+|---|---|---|
+| Large hamburger | `(890, 593, 102, 142)` | Hamburger |
+| Small hamburger | `(1544, 324, 43, 60)` | Hamburger |
+| Large left navigation background | `(556, 745, 84, 84)` | Background only |
+| Small left navigation button | `(1856, 4, 60, 60)` | Background plus arrow |
+
+Large/small hamburger ratios: 102/43 ≈ 2.372 and 142/60 ≈ 2.367; navigation ratio 84/60 = 1.4. Navigation composition differs. Device association is a hypothesis, not verified selection behavior.
 
 ## Hamburger source bounds and atlas records
 
@@ -62,7 +71,7 @@ Four 12-byte records from the atlas table at `0x10072E0FC` were former candidate
 
 The four rectangles are adjacent cells in the table's regular 16-unit grid. Under the hypothetical 8× mapping, their union is `(1792, 512, 256, 256)`. This overlapped the incorrectly decoded image's hamburger bounds but does not overlap the corrected bounds. Their original justification is invalid; they are unsupported hamburger candidates, not universally excluded by runtime evidence.
 
-Under the same unverified conversion, the corrected bounds in table units would be `(111.25, 74.125, 12.75, 17.75)` (X approximately 111–124, Y approximately 74–92). Search overlapping records under plausible mappings, allowing for padding and other coordinate systems. No new index is confirmed.
+Under the same unverified conversion, the corrected bounds in table units would be `(111.25, 74.125, 12.75, 17.75)` (X approximately 111–124, Y approximately 74–92). This is historical only; the current leading 4× candidate is described below. No hamburger index is runtime-confirmed.
 
 The records are four distinct entries. Their semantics, whether they render together, the table's relationship to `cock-5`, and the coordinate conversion remain unverified.
 
@@ -97,7 +106,45 @@ The historical search of enumerated direct callers of `FUN_10036C920` and `FUN_1
 establish a selection of indices 204, 205, 208, or 209. This is a bounded
 direct-call result; it does not rule out other table-indexing helpers,
 unresolved dynamic indices, or indirect calls. The hamburger-specific draw
-call remains unknown. Reevaluate the table using the corrected bounds rather than prioritizing the former four indices; confirm resource mapping, draw-path usage, and ownership by a reversible position change.
+call remains unknown. The subsequent bounded search identifies index 527 as the leading candidate; see below.
+
+## Manual Ghidra investigation — November 24, 2026
+
+Standalone GUI project `FUPatch4iPad`, Ghidra 12.2 on Intel macOS, using JDK 25 from a custom installation. The executable was extracted read-only from the Mac baseline IPA into `~/Code/FUPatch4iPad-analysis/MH Unite`. Terminal `file` reported Mach-O 64-bit arm64, and `shasum -a 256` matched the documented hash. Ghidra imported AARCH64 little-endian with minimum address `0x100000000`. Auto-analysis reported `ObjcMessageAnalyzer.findMessages` (`ArrayIndexOutOfBoundsException`, line 326) and missing `os/mac_x86_64` native demangler components; 1,381 messages were truncated. Analysis is usable for the inspected functions but not assumed complete.
+
+### Observed decompiled behavior
+
+- `0x100375FD4`: bit 15 clear selects CockpitTextureManager via `FUN_10035EE3C`, sub-index 0; bit 15 set selects ResourceManager key (third argument) and sub-index `flags & 0xFFF`. Both paths call `FUN_100208D14` to bind the selected texture. No source coordinate calculation here.
+- `0x1003762B4`: reads six 16-bit fields. Packs dimensions as `0xF2000000 | ((H & 0xFFF) << 12) | (W & 0xFFF)` and position as `((Y & 0xFFF) << 12) | (X & 0xFFF)`. Calls `FUN_100208DC0`, `FUN_100208E10`, and texture binding. No source scaling observed in packing.
+- `0x100208DC0`: links command blocks by copying existing command words to the end of the incoming block, encoding its address into two words and updating the pointer at `Ge + lane*8 + 0x170`. Does not interpret the rectangle.
+- `0x10036C920`: uses `param_6 * 0xC` with base `0x10072E0FC`. Reads X/W as signed shorts and Y/H as unsigned shorts in the shown decompilation; flags/resource at offsets 8/10. Constructs source corners using X+W and Y+H, without visible source scaling. Destination endpoints are formed separately from `param_2/param_3` plus scaled `param_4/param_5`, using `FUN_100359D8C`; submits via `FUN_10037D418`. Destination semantics are provisional. Downstream texture-coordinate interpretation remains unverified.
+
+### Atlas records and proposed 4× mapping
+
+| Index | Unslid record address | Atlas rectangle | Predicted pixels (4×) | Flags | Key |
+|---:|---|---|---|---|---:|
+| 527 (`0x20F`) | `0x10072F9B0` | `(221,147,27,38)` | `(884,588,108,152)` | `0x8004` | 11 |
+| 564 (`0x234`) | `0x10072FB6C` | `(138,185,23,23)` | `(552,740,92,92)` | `0x8004` | 11 |
+
+Record 564 raw bytes: `8A 00 B9 00 17 00 17 00 04 80 0B 00`. These match the six fields in the archived runtime experiment at `0x100378D6C` (index at incoming stack +8; X changed in x1), providing independent corroboration of the reference record. Its predicted rectangle contains the measured background with margins L/R/T/B = 4/4/5/3 pixels. Record 527 contains the large hamburger with margins 6/0/5/5 pixels; padding is a plausible explanation, not proven. Both have resource key 11 and sub-index 4, consistent with zero-based fifth texture selection if extraction order matches runtime order. Registration crosswalk is still unverified.
+
+### Bounded search and result
+
+Ghidra memory search `04 80 0B 00` returned contiguous flag addresses `0x10072F9B8`–`0x10072FD9C` at stride 12. The read-only Java script `FindHamburgerAtlas.java` scanned corresponding record starts `0x10072F9B0`–`0x10072FD94` (indices 527–610 inclusive). It filtered flags `0x8004`, resource 11, multiplied X/Y/W/H by four, and tested rectangle overlap against all four measured targets. User-reported console output:
+
+```text
+FindHamburgerAtlas.java> Running...
+Large hamburger | Index 527 | Address 0x10072F9B0 | Atlas (221,147,27,38) | Pixels (884,588,108,152)
+Large arrow background | Index 564 | Address 0x10072FB6C | Atlas (138,185,23,23) | Pixels (552,740,92,92)
+Search complete.
+FindHamburgerAtlas.java> Finished!
+```
+
+Neither smaller variant matched within this range/filter; this does not exclude other records, resources or mappings. Show References To `0x10072F9B0` returned zero locations. Dynamic index access is a plausible explanation, not proof of usage. No new runtime experiment occurred in this session.
+
+### Next runtime experiment
+
+Attach LLDB to a fresh game process, verify executable identity and obtain the current ASLR slide (`image list -o -f`). Start with a conditional breakpoint at `0x10036C920 + slide` for `$w5 == 527` (sixth integer argument at function entry). Inspect registers and backtrace before making changes. If there is no hit during a verified hamburger-visible state, test the other known indexed helpers, particularly the historically observed `0x100378D6C` path (index at incoming `sp+8` in the atlas-564 experiment; verify the calling convention for the new candidate). `0x100375804` is another candidate (high 32 bits of ninth argument). A missed breakpoint is bounded negative evidence, not a global exclusion. Once the actual draw is captured, verify the destination X argument and perform a reversible position-only experiment; observe whether the hamburger moves and restore debugger state. Do not modify the baseline IPA or investigate the hitbox until rendering ownership is established.
 
 ## Historical coordinate and input evidence
 
@@ -173,17 +220,3 @@ Selected REA evidence identifiers retained during the offline pass:
   `ev_6a815e9e1bb88000fb093ed2b6600bfe067747e67e4249e21eb4292efd21ad88`,
   `ev_62afcd3928c051477e80af57190236ca0327429d58ad018d7337ac369e865128`,
   `ev_bffb0dc2dac1096cc5ffc8d9a99a0b269b6e68c4f3b41dabd4fccebfb917e5a5`
-
-### Corrected texture extraction and known limitations
-
-The revised PVR texture decoding was performed using PVRTexTool 5.7.1 (Build `26.1@f61b9fab2511`), with PVRTexLib v5.7.1.
-
-The resulting PNGs appear to preserve the correct spatial arrangement and proportions of the UI artwork. However, visible color abnormalities remain, and the decoding should not be considered fully accurate.
-
-The hamburger's measured visible source bounds in `cock-5` are `(890, 593, 102, 142)`. These coordinates supersede the previous measurements but remain provisional until corroborated by atlas or rendering evidence.
-
-The decoded textures are intended as spatial references for reverse engineering, not as production-ready replacement assets.
-
-Because the current project objective is to relocate existing UI elements rather than reconstruct or replace their artwork, resolving the remaining color abnormalities is not a research priority.
-
-Further decoding investigation is warranted only if additional evidence suggests that the remaining inaccuracies affect texture geometry, source coordinates, or atlas interpretation.

@@ -6,39 +6,41 @@ confirmed.
 
 ## Current result
 
-The corrected PVRTexTool extraction identifies the hamburger in `cock-5`, with visible source bounds **(890, 593, 102, 142)**. These are visible pixels, not necessarily the complete sprite rectangle, draw call, or hitbox.
+**Atlas index 527 (`0x20F`) is the leading large-hamburger candidate**, not yet runtime-confirmed. The proposed 4× source-coordinate mapping is supported by two tight spatial matches, including the historical runtime navigation-background reference (564).
 
-The earlier extraction bounds `(1804, 604, 187, 119)` are superseded. Former atlas candidates **204, 205, 208, and 209** at `0x10072E0FC` no longer have a coordinate-fit justification. No replacement atlas index is confirmed.
+| Index | Unslid record address | Atlas rectangle | Predicted pixels (4×) | Flags | Key |
+|---:|---|---|---|---|---:|
+| 527 (`0x20F`) | `0x10072F9B0` | `(221,147,27,38)` | `(884,588,108,152)` | `0x8004` | 11 |
+| 564 (`0x234`) | `0x10072FB6C` | `(138,185,23,23)` | `(552,740,92,92)` | `0x8004` | 11 |
 
-## Confirmed findings
 
-- The target is the UUID-verified arm64 `MH Unite` executable, SHA-256
-  `25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4`.
-- Offline analysis used REA 6.10.1 / Ghidra 12.2 on Intel macOS (`x86_64`).
-- `cockpit/cock.tmh` was extracted read-only from the baseline IPA. Five
-  embedded PVR v2 PVRTC 4-bpp textures were identified. The earlier PNG decoding used PowerVR's `PVRTDecompressPVRTC` routine in a temporary wrapper; its image geometry is superseded by the corrected PVRTexTool extraction. The historical extraction did not modify the game binary.
-- Ghidra's `FUN_100375FD4` and `FUN_1003762B4` show that records with flags
-  `0x8000` use a ResourceManager key and the low 12 flag bits as texture
-  sub-index. For the four former candidates this is key 11 and sub-index 0; neither is confirmed for the hamburger.
-- The atlas-564 draw changed the circular background behind the left
-  navigation arrow, not the hamburger. The generic rectangle-test candidate
-  and accepted-event branch were not reached during the confirmed activation.
+## Current texture evidence
 
-## Hypotheses
+| Artwork in `cock-5` | Visible bounds (X, Y, W, H) | Composition |
+|---|---|---|
+| Large hamburger | `(890, 593, 102, 142)` | Hamburger |
+| Small hamburger | `(1544, 324, 43, 60)` | Hamburger |
+| Large left navigation background | `(556, 745, 84, 84)` | Background only |
+| Small left navigation button | `(1856, 4, 60, 60)` | Background plus arrow |
 
-- Under the unverified 8× mapping, corrected visible bounds correspond to `(111.25, 74.125, 12.75, 17.75)` in table units (X approximately 111–124, Y approximately 74–92). Search overlapping records, allowing for padded bounds and other plausible mappings.
-- The former four records map to `(1792, 512, 256, 256)` under that same assumption and do not overlap the corrected icon. They are unsupported, not universally excluded by runtime evidence.
-- The table's relationship to `cock-5`, coordinate scale, and record semantics (tiles, independent sprites, or another representation) remain unverified.
+PVRTexTool 5.7.1 (Build `26.1@f61b9fab2511`, PVRTexLib v5.7.1) yields spatially plausible PNGs with remaining color abnormalities. Visible bounds are provisional, not complete sprite rectangles. Device assignments (larger iPad, smaller iPhone) remain hypotheses; scaling ratios differ between controls. The previous `(1804,604,187,119)` bounds, 2× vertical preview convention and original 8× candidate justification are superseded. Former indices 204/205/208/209 are unsupported, not globally excluded.
 
-## Blockers and next action
+## Confirmed static and historical findings
 
-- **ResourceManager key 11 → `cock.tmh` → `cock-5` remains unresolved.** The known key/sub-index behavior is valid for the former records but does not establish the hamburger's resource.
-- The hamburger-specific draw call and touch region remain unidentified.
-- **Next:** conduct a fresh atlas candidate search using corrected bounds and independently trace resource registration and texture selection. Verify candidate usage during hamburger rendering and confirm ownership with a reversible draw-position change before pursuing the hitbox or persistent patch.
+- Standalone Ghidra 12.2 import matches the documented ARM64 executable SHA-256 `25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4`. Previous REA analysis used the same documented artifact. Ghidra auto-analysis had Objective-C and demangler errors; see technical reference.
+- `FUN_100375FD4` selects textures; `FUN_1003762B4` packs source fields without scaling; `FUN_100208DC0` links command blocks; `FUN_10036C920` indexes the 12-byte table at `0x10072E0FC`, builds source corners directly, and separately scales destination dimensions.
+- Records 527 and 564 use key 11 and flags `0x8004` (sub-index 4). The archived runtime atlas-564 bytes match the Ghidra record; the earlier visual experiment moved only the navigation background.
+- Bounded search of records 527–610 with that flags/key pair found 527 and 564 as the only overlaps for the four targets under 4×. Neither smaller variant matched within that scope. Ghidra reports zero direct references to record 527, compatible with dynamic indexing.
+- The generic rectangle predicate and accepted-event branch were not reached in earlier confirmed hamburger activation experiments.
 
-### Superseded texture aspect-ratio observation
+## Hypotheses and blockers
 
-The earlier 2× vertical preview convention was based on the incorrectly decoded texture. The corrected PVRTexTool extraction supersedes it. Do not use the old preview geometry or infer an intentional 2× renderer multiplier. Preserve historical images as historical evidence; use corrected, unscaled images for current analysis.
+- 4× source-coordinate conversion and key 11/sub-index 4 mapping to `cock-5` are strongly suggested by spatial and historical runtime evidence, but not independently verified in the graphics interpreter or resource registration.
+- Hamburger draw call, destination-coordinate origin, touch region and persistent patch remain unresolved.
+
+## Next action
+
+Attach LLDB to a fresh game process, verify executable identity and obtain the current ASLR slide (`image list -o -f`). Start with a conditional breakpoint at `0x10036C920 + slide` for `$w5 == 527` (sixth integer argument at function entry). Inspect registers and backtrace before making changes. If there is no hit during a verified hamburger-visible state, test the other known indexed helpers, particularly the historically observed `0x100378D6C` path (index at incoming `sp+8` in the atlas-564 experiment; verify the calling convention for the new candidate). `0x100375804` is another candidate (high 32 bits of ninth argument). A missed breakpoint is bounded negative evidence, not a global exclusion. Once the actual draw is captured, verify the destination X argument and perform a reversible position-only experiment; observe whether the hamburger moves and restore debugger state. Do not modify the baseline IPA or investigate the hitbox until rendering ownership is established.
 
 ## Historical leads and exclusions
 

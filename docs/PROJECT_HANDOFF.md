@@ -85,29 +85,33 @@ Existing historical reports should be preserved rather than rewritten to match n
 
 ## 4. Current Research Status
 
-### 4.1 Corrected hamburger source image
+### 4.1 Revised spatial texture reference
 
-The hamburger is visually identified in `cock-5`, the fifth texture extracted from `Payload/MH Unite.app/cockpit/cock.tmh`.
+PVRTexTool 5.7.1 (Build `26.1@f61b9fab2511`, PVRTexLib v5.7.1) produced revised PNGs whose spatial layout appears correct, but colors remain abnormal. Use the unscaled images as provisional coordinate references, not replacement assets. The earlier bounds `(1804, 604, 187, 119)` and 2× vertical preview hypothesis are superseded.
 
-**Current visible source bounds:** `(890, 593, 102, 142)` (X, Y, width, height), measured on the corrected PVRTexTool extraction. These are visible pixel bounds, not necessarily the complete sprite rectangle.
+| Artwork in `cock-5` | Visible bounds (X, Y, W, H) | Composition |
+|---|---|---|
+| Large hamburger | `(890, 593, 102, 142)` | Hamburger |
+| Small hamburger | `(1544, 324, 43, 60)` | Hamburger |
+| Large left navigation background | `(556, 745, 84, 84)` | Background only |
+| Small left navigation button | `(1856, 4, 60, 60)` | Background plus arrow |
 
-The earlier bounds `(1804, 604, 187, 119)` came from an incorrectly decoded image and are superseded. The earlier 2× vertical preview convention is also superseded; it is not evidence of intentional renderer scaling. Use the corrected, unscaled extraction for visual and coordinate analysis.
+The larger/smaller variants are presumed iPad/iPhone assets, respectively; device selection is not verified. Hamburger size ratios are about 2.37×; navigation variants are 1.4× and differ in composition.
 
-Identifying the source pixels does not identify the rendering instruction. See [technical-reference.md](technical-reference.md) for historical extraction details.
+### 4.2 New leading atlas candidate: 527
 
-### 4.2 Atlas candidates require reevaluation
+| Index | Unslid record address | Atlas rectangle | Predicted pixels (4×) | Flags | Key |
+|---:|---|---|---|---|---:|
+| 527 (`0x20F`) | `0x10072F9B0` | `(221,147,27,38)` | `(884,588,108,152)` | `0x8004` | 11 |
+| 564 (`0x234`) | `0x10072FB6C` | `(138,185,23,23)` | `(552,740,92,92)` | `0x8004` | 11 |
 
-The previous candidates 204, 205, 208, and 209 in the table at `0x10072E0FC` were selected using the incorrect source bounds. Their union under the hypothetical 8× mapping is `(1792, 512, 256, 256)`, which does not overlap the corrected bounds.
+Both records use sub-index 4. Under a proposed 4× mapping, both rectangles contain the measured artwork with plausible margins. Record 564 is historically runtime-confirmed as moving the navigation background, and its archived six fields match the current Ghidra bytes. Record 527 is the strongest large-hamburger candidate, not runtime-confirmed. The 4× mapping and key 11 → `cock.tmh` → sub-index 4 → `cock-5` crosswalk are strongly suggested, not independently established.
 
-These entries are now unsupported hamburger candidates, not globally ruled out by runtime evidence. Do not prioritize them without independent evidence.
+The bounded Ghidra search of indices 527–610 with flags `0x8004` and key 11 returned only 527 and 564 for the four measured targets; no smaller variant matched. Zero direct references to record 527 were reported; dynamic indexing remains possible. Former candidates 204/205/208/209 and the old 8× fit are not priorities.
 
-If the unverified 8× mapping applies, the corrected bounds correspond to approximately `(111.25, 74.125, 12.75, 17.75)` in table units. Use this only as a fresh search hypothesis; padded sprite bounds and other mappings remain possible.
+### 4.3 Static analysis progress
 
-### 4.3 ResourceManager mapping remains unresolved
-
-Static analysis of the former candidates established ResourceManager key 11 and texture sub-index 0 for their flagged rendering path. This remains valid for those records, but does not establish that the hamburger uses either value.
-
-The relationship **ResourceManager key 11 → registered resource → `cock.tmh` → embedded texture** remains unverified. Independently establish the actual resource and texture mapping and the atlas table's relationship to `cock-5`. Relevant functions and evidence are in the technical reference.
+A standalone Ghidra 12.2 project on Intel macOS imported the baseline executable with matching SHA-256. The decompiled texture-selection and indexed-rendering functions corroborate the record structure and separate source/destination geometry. No source-coordinate scaling was observed in the inspected packing helpers. Analysis reported Objective-C analyzer errors and missing native GNU demangler components; the full warning list was truncated. See [technical-reference.md](technical-reference.md) for details.
 
 ## 5. Confirmed Cockpit and Input Findings
 
@@ -250,7 +254,7 @@ The following are unresolved:
 
 1. Does ResourceManager key 11 actually reference `cock.tmh`?
 2. Which embedded texture corresponds to the relevant sub-index?
-3. Does the atlas table describe source rectangles in `cock-5`, and which records, if any, match the corrected bounds?
+3. Does the proposed 4× mapping hold, and does record 527 actually draw the large hamburger?
 4. Which executable instruction draws the persistent hamburger?
 5. Which touch-input region activates it?
 6. Where does its horizontal coordinate originate?
@@ -261,17 +265,11 @@ Do not infer answers from spatial coincidence or unrelated UI controls.
 
 ## 9. Recommended Research Direction
 
-**Primary next steps:** Perform a fresh atlas search using the corrected source bounds under explicitly labeled plausible coordinate mappings, and independently trace ResourceManager registration and texture selection, including key 11.
+**Primary next step: runtime confirmation of atlas index 527.**
 
-Prioritize records only when supported by texture mapping and draw-path evidence; do not resume the former four candidates solely because of their old coordinate fit.
+Attach LLDB to a fresh game process, verify executable identity and obtain the current ASLR slide (`image list -o -f`). Start with a conditional breakpoint at `0x10036C920 + slide` for `$w5 == 527` (sixth integer argument at function entry). Inspect registers and backtrace before making changes. If there is no hit during a verified hamburger-visible state, test the other known indexed helpers, particularly the historically observed `0x100378D6C` path (index at incoming `sp+8` in the atlas-564 experiment; verify the calling convention for the new candidate). `0x100375804` is another candidate (high 32 bits of ninth argument). A missed breakpoint is bounded negative evidence, not a global exclusion. Once the actual draw is captured, verify the destination X argument and perform a reversible position-only experiment; observe whether the hamburger moves and restore debugger state. Do not modify the baseline IPA or investigate the hitbox until rendering ownership is established.
 
-If the static mapping proves inconclusive, use Phase 7's confirmed menu-state transition to perform targeted runtime comparisons between hamburger-visible and menu-open states.
-
-Once a specific draw call has been identified, use a reversible coordinate modification to confirm its ownership.
-
-Only then investigate the associated touch region and persistent patch design.
-
-Avoid repeating already disproven atlas-564 experiments or spending time on generic state-machine disassembly without a specific hypothesis.
+If needed, use the Phase 7 menu-state indicator for visible/hidden comparisons. Independently verify texture identity and coordinate semantics; do not resume old 8× candidates without new evidence.
 
 ## 10. Instructions for Future Sessions
 
@@ -300,11 +298,9 @@ Read `docs/PROJECT_HANDOFF.md`, `docs/research.md`, and `docs/technical-referenc
 
 The objective is to relocate the persistent hamburger menu icon in Monster Hunter Freedom Unite iOS 1.00.11 to the appropriate right-edge position on an iPad Air M2 while preserving size, vertical position, partial clipping, and touch functionality.
 
-The corrected PVRTexTool extraction locates the hamburger in `cock-5` at `(890, 593, 102, 142)`. The former atlas candidates 204, 205, 208, and 209 have lost their coordinate-fit justification; the earlier 2× vertical scaling hypothesis is superseded. Perform a fresh atlas search and independently verify resource-to-texture mapping. The 8× coordinate conversion and the mapping between ResourceManager key 11, `cock.tmh`, and texture sub-index 0 remain unresolved.
+The revised PVRTexTool extraction locates the larger hamburger in `cock-5` at `(890, 593, 102, 142)`; color abnormalities remain. Atlas index 527 (`0x20F`), rectangle `(221,147,27,38)`, flags `0x8004`, key 11, is the leading candidate under the proposed 4× mapping. Record 564 provides a runtime-backed navigation-background reference. Neither the mapping nor hamburger ownership is fully verified.
 
-The hamburger's actual rendering call and touch region have not been confirmed.
-
-Please continue from these findings, avoid repeating ruled-out investigations, and favor evidence-driven reverse engineering with small, reversible experiments.
+Next, attach LLDB, obtain the fresh ASLR slide and test a conditional breakpoint for index 527 at `0x10036C920`. Inspect the actual call before attempting a reversible X-position change. The hamburger hitbox and persistent patch remain unknown. Avoid repeating excluded investigations and preserve the baseline IPA and saves.
 
 ## 12. Completion Criteria
 
