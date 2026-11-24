@@ -1,6 +1,8 @@
-# MHFU UI research — Phase 4: Cockpit rendering paths
+# Archived: Cockpit rendering investigation
 
-Main research record: [docs/research.md](research.md).
+Historical report originally labeled “Phase 4”. Current status is in
+[research.md](../research.md); the curated technical material is in
+[technical-reference.md](../technical-reference.md).
 
 **Scope:** Static ARM64 analysis of the Cockpit render dispatcher and direct
 rendering helpers. No IPA, executable, manifest, save data, or working game was
@@ -403,6 +405,109 @@ Avoid repeating investigations of the now-identified menu navigation-arrow backg
 A successful next milestone is a persistent, reversible LLDB coordinate modification that visibly moves the **hamburger itself**, without moving unrelated UI elements.
 
 After that, investigate its touch-input path separately before implementing a permanent patch.
+
+### 10. Offline asset and ResourceManager follow-up — November 24, 2026
+
+This is a static, offline update using REA 6.10.1 / Ghidra 12.2 on the
+UUID-verified arm64 executable (SHA-256
+`25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4`). It
+does not replace or revise the historical runtime observations above.
+
+#### Confirmed asset evidence
+
+The IPA member `Payload/MH Unite.app/cockpit/cock.tmh` has SHA-256
+`e711ab9a273168f80e0d2f9e3548fd5ae26e025c33671ec93595fcb7d8848cd6`. Five
+embedded PVR v2 textures were reconstructed and decoded as standard PVRTC
+4-bpp (`flags=0x8019`, pixel type `0x19`):
+
+| Texture | Dimensions |
+|---|---:|
+| `cock-1` | 1024×1024 |
+| `cock-2` | 512×512 |
+| `cock-3` | 2048×2048 |
+| `cock-4` | 1024×1024 |
+| `cock-5` | 2048×2048 |
+
+The hamburger is visually present in `cock-5`. Its tight visible bounds are
+**(X=1804, Y=604, width=187, height=119)**. The decoder, intermediate files,
+and contact sheet were confined to temporary storage; the IPA, `.tmh`, and
+repository game binaries were not modified.
+
+#### Atlas candidates and the scale hypothesis
+
+Four 12-byte records at the table based at `0x10072E0FC` have these fields:
+
+| Index | Record address | X | Y | W | H | Flags | Resource field |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 204 | `0x10072EA8C` | 224 | 64 | 16 | 16 | `0x8000` | 11 |
+| 205 | `0x10072EA98` | 240 | 64 | 16 | 16 | `0x8000` | 11 |
+| 208 | `0x10072EABC` | 224 | 80 | 16 | 16 | `0x8000` | 11 |
+| 209 | `0x10072EAC8` | 240 | 80 | 16 | 16 | `0x8000` | 11 |
+
+**Hypothesis, not a confirmed engine mapping:** interpreting the coordinates
+at 8× scale makes these four adjacent cells cover `(1792, 512, 256, 256)` in
+`cock-5`, which contains the visible hamburger bounds. The cells also include
+surrounding image content, including part of an adjacent graphic. The
+coordinate fit does not prove that the game samples this table against
+`cock-5` with that scale.
+
+The records are confirmed as four separate 16×16 table entries laid out on a
+regular grid. Existing evidence does **not** establish whether they are texture
+tiles, independent sprites, or another form of atlas subregion; nor that the
+four are drawn together as the hamburger.
+
+#### ResourceManager behavior established by Ghidra
+
+- `FUN_100375FD4` and the table-record loader `FUN_1003762B4` use the high bit
+  of the flags to select the ResourceManager path. For a candidate record,
+  flags `0x8000` yield texture sub-index `flags & 0x0FFF = 0`; resource field
+  `11` is passed to `FUN_1002C2138`.
+- `FUN_1002C2138` searches ResourceManager entries by integer key and returns
+  the associated pointer. Its body does not provide the resource filename or
+  source package.
+- `FUN_10035EE00` / `FUN_10035EE14` access or populate the Cockpit texture
+  cache slot selected by `resource_id & 0xF`; ID 11 therefore selects slot 11.
+  `FUN_10035D968(resource, 0)` retrieves the selected sub-index.
+
+This proves the table records request **ResourceManager key 11, texture
+sub-index 0**. It does **not** prove key 11 is `cock.tmh`, or that sub-index 0
+is `cock-5`. The relationship between the ResourceManager registration entry
+and the `.tmh` member remains unresolved.
+
+#### Rendering-call limits and excluded paths
+
+The existing Ghidra analysis identifies generic table-backed helpers:
+
+- `FUN_10036C920` indexes the table with its `param_6` argument and submits
+  draw data through `FUN_10037D418`.
+- `FUN_100375804` indexes it using the high 32 bits of its ninth argument and
+  submits draw data through `FUN_1002195A4`.
+
+Ghidra’s enumerated direct callers of these two functions did not establish a
+call selecting indices 204, 205, 208, or 209. This bounded check does not
+exclude other table-indexing helpers, indirect calls, or unresolved dynamic
+indices. **The hamburger-specific draw call and touch region remain
+unidentified.**
+
+Previously tested or excluded leads remain distinct from this asset match:
+
+- Atlas index 564 was visually identified as the circular background behind
+  the left navigation arrow; changing it moved that background, not the
+  hamburger.
+- The generic rectangle-test candidate at `0x100460D44` and the
+  accepted-event branch at `0x10037D8EC` had no hits in the confirmed
+  hamburger activation.
+- PVRTexToolCLI was unavailable, and ImageMagick, FFprobe, and `sips` did not
+  decode these PVR files. `texture2ddecoder` was avoided because of its
+  documented macOS crash risk. The temporary PowerVR decoder succeeded.
+
+#### Current next step
+
+Trace the `cock.tmh` resource-registration/loading path and map its registered
+ResourceManager key(s) and texture sub-indices to the five embedded PVR
+textures. Specifically, determine whether key 11 is `cock.tmh` and which
+sub-index, if any, corresponds to `cock-5`. Only after that link is established
+should the atlas candidates be used to pursue the icon-specific draw call.
 
 ### Research Integrity
 
