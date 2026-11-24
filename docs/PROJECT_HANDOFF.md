@@ -1,689 +1,360 @@
-# FUPatch4iPad — Project Objective & Session Handoff
+# FUPatch4iPad — Project Handoff
 
 **Project:** FUPatch4iPad  
-**Target game:** Monster Hunter Freedom Unite (MH Unite), iOS v1.00.11  
-**Target device:** iPad Air 11-inch (M2), iPadOS 18.7.3  
-**Project status:** Active reverse engineering; input hitbox manipulation verified  
-**Primary objective:** Correct the persistent hamburger menu icon's horizontal placement on iPad
+**Game:** Monster Hunter Freedom Unite (MH Unite), iOS 1.00.11  
+**Target:** iPad Air 11-inch (M2), iPadOS 18.7.3  
+**Status:** Active reverse engineering  
+**Last reviewed:** November 24, 2026
 
 ---
 
 ## 1. Primary Objective
 
-The goal of FUPatch4iPad is to modify the iOS version of **Monster Hunter Freedom Unite (v1.00.11)** so that its persistent, partially clipped hamburger menu icon appears at the appropriate position along the **right edge of the iPad display**.
+Relocate the persistent hamburger menu icon in Monster Hunter Freedom Unite to the appropriate position along the right edge of the iPad display.
 
-The target is a precise UI-position correction, not a general UI redesign.
+The modification must:
 
-### Desired behavior
+1. Preserve the icon's original size.
+2. Preserve its vertical position.
+3. Preserve its partially clipped appearance.
+4. Keep the functional touch region aligned with the icon.
+5. Avoid altering unrelated menu controls.
+6. Persist across application launches without LLDB intervention.
 
-The hamburger menu icon must:
+The final deliverable is a reproducible patch to a working copy of the iOS application.
 
-1. Move horizontally to the intended location at the right edge of the iPad display.
-2. Preserve its original visual size.
-3. Preserve its original vertical position.
-4. Preserve its original partially clipped appearance.
-5. Remain visually consistent with the original game.
-6. Retain a correctly aligned, functional touch area.
-7. Work reliably without requiring manual LLDB commands on each launch.
-
-**The intended final result is a persistent modification to the game, not a temporary runtime memory edit.**
-
-The current work is investigating the original executable's rendering and input systems to identify a reliable patch point.
-
-### Important distinction
-
-The hamburger icon is the final target.
-
-The menu's left navigation arrow, which has been used extensively during experiments, is a **research reference object**.
-
-Successfully moving the left arrow does not mean the project's main objective has been completed.
-
----
+**The primary objective has not yet been completed.**
 
 ## 2. Project Environment
 
-### Target application
-
 | Property | Value |
 |---|---|
-| Game | Monster Hunter Freedom Unite |
-| iOS application name | MH Unite |
+| Repository | `E:\Archive\FUPatch4iPad` |
+| Immutable IPA | `E:\Games\MHFU-iPad-baseline.ipa` |
 | Bundle identifier | `jp.co.capcom.mhp2g` |
-| Version | `1.00.11` |
 | Architecture | ARM64 |
-| Platform | iOS |
-| Device | iPad Air 11-inch (M2), `iPad14,8` |
-| OS version | iPadOS 18.7.3 |
+| Mach-O UUID | `58cc55c760ca3196b5d20c2aeb64b32b` |
+| Device | `iPad14,8` |
+| Debugging | Xcode, LLDB, CoreDevice |
+| Offline analysis | REA 6.10.1, Ghidra 12.2 |
 
-### Development environment
+The executable SHA-256 recorded in the current research is:
 
-**Windows repository:**
+`25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4`
 
-```text
-E:\Archive\FUPatch4iPad
-```
+**Safety constraints:** Preserve the baseline IPA and save data. Use reversible runtime experiments and working copies for binary patches.
 
-**Immutable baseline IPA:**
+## 3. Documentation Organization
 
-```text
-E:\Games\MHFU-iPad-baseline.ipa
-```
-
-**macOS tools:**
-
-- Xcode device services
-- `xcrun devicectl`
-- LLDB
-- ARM64 disassembly and runtime memory inspection
-
-### Device identifier used during testing
+The documentation is intended to have the following structure:
 
 ```text
-EB90DDE0-50FB-5593-A792-E211E636A9EC
+docs/
+├── README.md
+├── PROJECT_HANDOFF.md
+├── research.md
+├── technical-reference.md
+│
+├── phases/
+│   ├── research-phase5.md
+│   ├── research-phase6-cockpit-initialization.md
+│   └── research-phase7-hamburger-state.md
+│
+├── archive/
+│   └── Historical investigations
+│
+└── logs/
+    └── Raw debugging and diagnostic output
 ```
 
-This is the device identifier observed during the documented debugging session. Reconfirm it when necessary.
+This is the proposed organization, not confirmation that all files have already been moved.
 
-### Important safety constraints
+### Document responsibilities
 
-- Never modify the immutable baseline IPA.
-- Do not overwrite or deliberately alter game save data.
-- Keep experiments reversible.
-- Use working copies for binary modifications.
-- Do not reinstall the application unnecessarily.
-- Record confirmed findings before attempting major changes.
-- Do not confuse temporary runtime modifications with persistent patches.
-
----
-
-## 3. Research Documentation
-
-The project uses phase-specific research files.
-
-| Document | Purpose |
+| Document | Responsibility |
 |---|---|
-| `docs/research.md` | Main research record |
-| `docs/research-phase4.md` | Existing Phase 4 research |
-| `docs/research-phase4-menu-layout.md` | Menu layout and rendering investigation |
-| `docs/research-phase5-input-hitboxes.md` | Touch-input pipeline and region hitboxes |
-| `docs/research-phase6-cockpit-initialization.md` | Startup initialization and hitbox verification |
-| `docs/PROJECT_HANDOFF.md` | Project objective, continuity, and restart instructions |
+| `README.md` | Documentation navigation |
+| `PROJECT_HANDOFF.md` | Objective, current state, and continuation instructions |
+| `research.md` | Concise, authoritative summary of current research |
+| `technical-reference.md` | Detailed technical evidence, addresses, and hypotheses |
+| `phases/` | Chronological investigation reports |
+| `archive/` | Historical and superseded research |
+| `logs/` | Raw debugging evidence |
 
-**Documentation status:** Some later-phase documents were drafted during ChatGPT conversations. Their presence in the repository should be verified before relying on their filenames.
+Existing historical reports should be preserved rather than rewritten to match newer findings.
 
-Do not overwrite existing research files merely because a new chat proposes a similar document.
+## 4. Current Research Status
 
----
+### 4.1 Hamburger source image identified
 
-## 4. Technical Architecture Discovered
+The hamburger graphic has been visually identified in the fifth decoded Cockpit texture:
 
-The game's Cockpit subsystem manages relevant UI rendering and input regions.
+**Texture:** `cock-5`  
+**Dimensions:** 2048 × 2048  
+**Visible hamburger bounds:** `(1804, 604, 187, 119)`
+
+The image was extracted from:
+
+`Payload/MH Unite.app/cockpit/cock.tmh`
+
+The `.tmh` resource contains five embedded PVR v2 textures, decoded using PowerVR's `PVRTDecompressPVRTC` routine.
+
+The extraction and decoding process did not modify the baseline IPA.
+
+**Important:** Identifying the source pixels does not identify the executable instruction that renders them.
+
+### 4.2 Candidate atlas entries
+
+Four records in the atlas table at unslid address `0x10072E0FC` have been identified as candidates:
+
+| Index | X | Y | W | H |
+|---|---:|---:|---:|---:|
+| 204 | 224 | 64 | 16 | 16 |
+| 205 | 240 | 64 | 16 | 16 |
+| 208 | 224 | 80 | 16 | 16 |
+| 209 | 240 | 80 | 16 | 16 |
+
+Each record has resource field `11` and flags `0x8000`.
+
+A hypothetical 8× coordinate conversion makes their combined region contain the hamburger's visible pixels.
+
+However, the scale, record semantics, and relationship to the actual draw call remain unproven.
+
+**Do not treat these records as confirmed hamburger sprites.**
+
+### 4.3 Current ResourceManager blocker
+
+Static analysis established that the flagged atlas-rendering path uses:
+
+- ResourceManager key `11`.
+- Texture sub-index `0`.
+- Cockpit texture loading and caching routines.
+
+Relevant functions include:
+
+| Function | Role |
+|---|---|
+| `0x100375FD4` | Resource lookup and texture selection |
+| `0x1003762B4` | Atlas record consumption |
+| `0x1002C2138` | ResourceManager key lookup |
+| `0x10035EE00` / `0x10035EE14` | Cockpit texture cache |
+| `0x10035D968` | Texture sub-index retrieval |
+
+The missing relationship is:
+
+**ResourceManager key 11 → registered resource → `cock.tmh` → embedded texture**
+
+Neither the association with `cock.tmh` nor the relationship between sub-index 0 and `cock-5` has been confirmed.
+
+This is the main blocker in the latest static-analysis research.
+
+## 5. Confirmed Cockpit and Input Findings
 
 ### Cockpit singleton
 
-LLDB resolved the symbol:
+The singleton symbol is:
 
-```text
-Singleton<Cockpit>::objectPtr
-```
+`Singleton<Cockpit>::objectPtr`
 
 Unslid address:
 
-```text
-0x100732FC0
-```
+`0x100732FC0`
 
-For each process:
+Runtime address:
 
-```text
-Runtime singleton address = 0x100732FC0 + ASLR slide
-```
+`0x100732FC0 + ASLR slide`
 
-The singleton points to the live Cockpit object.
+The pointer value gives the active Cockpit object.
 
-Cockpit object addresses are process-specific and must be read rather than assumed.
+### Input-region array
 
-### Important functions
+The Cockpit input-region array begins at:
 
-All addresses in this table are **unslid Mach-O addresses**.
+`Cockpit + 0x2D70`
 
-| Function | Address | Role |
+Records occupy 20 bytes each.
+
+The rectangle fields are:
+
+| Offset | Type | Meaning |
 |---|---|---|
-| Cockpit dispatcher | `0x10037EDBC` | Dispatches relevant Cockpit rendering |
-| Menu renderer | `0x1003A5904` | Draws the investigated menu elements |
-| Layout resolver | `0x10039DAD4` | Converts layout descriptors into positions |
-| Graphics helper | `0x100378D6C` | Lower-level graphics rendering |
-| Native touch handler | `0x10046328C` | Receives UIKit touch events |
-| Input manager | `0x100460A24` | Processes touch coordinates |
-| Point-in-rectangle helper | `0x100460BD0` | Tests touches against rectangles |
-| Region processor | `0x100007720` | Processes input-region entries |
-
-The region processor's runtime address in the earlier debugging session was `0x100F7F720`.
-
-Do not mistake this runtime address for its unslid address.
-
-### Layout information
-
-The menu renderer calls the layout resolver for entry 98.
-
-The investigated layout record contained:
-
-```text
-Base index: 99
-X offset:   -266
-Y offset:   +70
-```
-
-The resolver produced approximately:
-
-```text
-X = 1821
-Y = 112
-```
-
-Changing the resolved X coordinate from `1821` to `1221` moved the menu's visuals left by 600 game-coordinate units.
-
-However, the input hitboxes remained at their original positions.
-
-**Conclusion:** Rendering coordinates and touch-region coordinates are independently controlled.
-
----
-
-## 5. Confirmed Input-Region Structure
-
-The Cockpit contains an array of input regions beginning at:
-
-```text
-Cockpit + 0x2D70
-```
-
-Each region occupies:
-
-```text
-0x14 bytes (20 bytes)
-```
-
-The first eight bytes contain:
-
-```text
-+0x00  int16   X
-+0x02  int16   Y
-+0x04  uint16  Width
-+0x06  uint16  Height
-```
-
-The remaining fields contain additional region state and flags.
+| `+0x00` | int16 | X |
+| `+0x02` | int16 | Y |
+| `+0x04` | uint16 | Width |
+| `+0x06` | uint16 | Height |
 
 ### Confirmed left navigation arrow
 
-The left navigation arrow corresponds to region entry 46:
+Entry 46 is the left navigation arrow's hitbox:
 
-```text
-0x2D70 + 46 * 0x14 = 0x3108
-```
+`Cockpit + 0x3108`
 
-Thus:
+Original rectangle:
 
-```text
-Left-arrow hitbox = Cockpit + 0x3108
-```
+`(1809, 109, 102, 76)`
 
-Its original rectangle in the tested menu state is:
+Changing X from `1809` to `1209` successfully moved its functional touch area 600 game-coordinate units left.
 
-```text
-X      = 1809
-Y      = 109
-Width  = 102
-Height = 76
-```
+This was verified experimentally in two separate debugging sessions.
 
-### Experimentally verified modification
+Its graphics did not move automatically.
 
-Changing:
+**The left arrow is a reference control, not the hamburger icon.**
 
-```text
-X = 1809
-```
+### Rendering findings
 
-to:
+An earlier menu-renderer experiment moved menu visuals by changing a resolved X coordinate from `1821` to `1221`.
 
-```text
-X = 1209
-```
+The touch regions remained unchanged.
 
-moves the arrow's functional touch region **600 game-coordinate units left**.
+A lower-level atlas-564 modification moved only the left navigation arrow's circular background, not the hamburger.
 
-This was confirmed by actual touch interaction in two separate debugging sessions.
+These findings establish that relevant visual and input positions can be controlled independently.
 
-The rendered arrow does not automatically follow the hitbox.
+They do not establish the hamburger's own rendering path.
 
-This is one of the project's strongest experimental findings.
+## 6. Hamburger State Investigation
 
----
+Phase 7 established the following UI behavior:
 
-## 6. Rendering Experiments
+- The hamburger is visible when the menu is closed.
+- Opening the menu hides it.
+- A separate lower-right close button dismisses the menu.
+- Closing the menu restores the hamburger.
 
-Two different visual modifications were investigated.
+The Cockpit field at `+0x11B4` changes reproducibly:
 
-### Graphics-helper modification
+| Menu state | Value |
+|---|---:|
+| Closed | 0 |
+| Open | 256 |
+| Closed again | 0 |
 
-A lower-level draw-coordinate modification moved only the circular background of the left navigation arrow.
+A watchpoint caught this change inside the function at unslid address:
 
-It did not move the glyph or touch region.
+`0x10037DBB0`
 
-Therefore, this graphics helper alone is not sufficient to relocate a complete interactive UI element.
+The relevant instruction writes to `Cockpit + 0x11B5`, causing the observed four-byte value to become `256`.
 
-### Menu-renderer layout modification
+The function also updates other menu-related state.
 
-An LLDB breakpoint in the menu renderer at unslid:
+This is a **confirmed menu-opening transition**, not a confirmed hamburger hitbox or rendering routine.
 
-```text
-0x1003A51C0
-```
+It may be useful for comparing draw behavior between the hamburger-visible and menu-open states.
 
-modified the resolved layout coordinate on the stack.
+## 7. Important Debugging Procedure
 
-Original:
-
-```text
-X = 1821
-```
-
-Modified:
-
-```text
-X = 1221
-```
-
-This moved the investigated menu visuals 600 game-coordinate units left.
-
-The corresponding touch regions did not move.
-
-**Conclusion:** A complete patch will likely require coordinating the visual and input paths, or identifying a higher-level source shared by both.
-
-No shared source has yet been confirmed.
-
----
-
-## 7. Touch-Input Pipeline
-
-The input investigation established the following broad path:
-
-```text
-UIKit touch events
-    |
-    v
-Native touch handler
-    |
-    v
-locationInView:
-    |
-    v
-Game input manager
-    |
-    v
-Coordinate conversion
-    |
-    v
-Touch slots
-    |
-    v
-Input-region processor
-    |
-    v
-Point-in-rectangle comparison
-    |
-    v
-UI interaction
-```
-
-The input manager was observed multiplying UIKit touch positions by a scale factor of `2.0`.
-
-The game maintains up to five touch slots, each with a stride of `0x60`.
-
-The point-in-rectangle routine compares touch coordinates against integer rectangle boundaries.
-
-A confirmed left-arrow rectangle used:
-
-```text
-Left   = 1809
-Top    = 109
-Right  = 1911
-Bottom = 185
-```
-
-Equivalent to:
-
-```text
-X = 1809
-Y = 109
-W = 102
-H = 76
-```
-
-This matches the Cockpit input-region record.
-
----
-
-## 8. Startup Debugging Breakthrough
-
-A previous LLDB session could not relaunch the app because its `remote-ios` platform was disconnected.
-
-A working approach was discovered using `devicectl`.
-
-### Launch suspended
-
-From macOS Terminal:
+The installed game can be launched suspended before initialization:
 
 ```bash
 xcrun devicectl device process launch \
-  --device EB90DDE0-50FB-5593-A792-E211E636A9EC \
+  --device <DEVICE_ID> \
   --start-stopped \
   jp.co.capcom.mhp2g
 ```
 
-The app launches in a suspended state. A black screen is expected.
+Then locate the PID:
 
-### Attach LLDB
+```bash
+xcrun devicectl device info processes \
+  --device <DEVICE_ID>
+```
+
+Start LLDB:
 
 ```bash
 xcrun lldb
 ```
 
-Inside LLDB:
+Attach:
 
 ```lldb
-device select EB90DDE0-50FB-5593-A792-E211E636A9EC
+device select <DEVICE_ID>
 device process attach -p <PID>
 ```
 
-Obtain the PID from:
+A successful suspended attachment previously stopped at `dyld::_dyld_start`.
 
-```bash
-xcrun devicectl device info processes \
-  --device EB90DDE0-50FB-5593-A792-E211E636A9EC
-```
-
-Attaching to the suspended game stopped at:
-
-```text
-dyld`_dyld_start
-```
-
-This allowed watchpoints to be installed before normal initialization.
-
-### Confirmed process
-
-During the Phase 6 session:
-
-```text
-PID:         29459
-ASLR slide:  0x2338000
-```
-
-The runtime singleton address was:
-
-```text
-0x102A6AFC0
-```
-
-The singleton was initially zero.
-
-An eight-byte write watchpoint caught its first assignment:
-
-```text
-Old: 0x0
-New: 0x10842D500
-```
-
-The assignment occurred during dyld-managed static initialization.
-
-The stopped code was:
-
-```text
-Runtime: 0x1026A104C
-Unslid:  0x10036904C
-```
-
-Function:
-
-```text
-MH Unite`___lldb_unnamed_symbol13134
-```
-
-This provides a starting point for investigating Cockpit construction.
-
----
-
-## 9. Hitbox Initialization Investigation
-
-After the singleton was assigned, the hitbox at:
-
-```text
-Cockpit + 0x3108
-```
-
-was initially zeroed.
-
-A write watchpoint was installed on its 16-bit X coordinate.
-
-The first detected write occurred inside:
-
-```text
-libsystem_platform.dylib`_platform_memset
-```
-
-Called by:
-
-```text
-MH Unite`___lldb_unnamed_symbol13134 + 1108
-```
-
-Later, memory was observed containing:
-
-```text
-X = -437
-Y = 0
-W = 0
-H = 0
-```
-
-The origin of this intermediate value is unknown.
-
-After normal initialization, the rectangle contained:
-
-```text
-X = 1809
-Y = 109
-W = 102
-H = 76
-```
-
-The watchpoint did not produce a reported stop for the transition to the final values.
-
-**Important unresolved issue:** The exact instruction initializing the final rectangle has not been identified.
-
-Do not assume the value `-437` is a confirmed layout parameter.
-
----
-
-## 10. Latest Successful Experiment
-
-In process PID `29459`:
-
-```text
-Cockpit singleton slot: 0x102A6AFC0
-Cockpit object:         0x10842D500
-Left-arrow hitbox:      0x108430608
-```
-
-The following LLDB command was executed:
+Determine the current slide with:
 
 ```lldb
-memory write --size 2 --format d 0x108430608 1209
+image list -o -f
 ```
 
-The rectangle was verified as:
+Never reuse runtime pointers or ASLR slides from earlier processes.
 
-```text
-1209, 109, 102, 76
-```
+## 8. Remaining Technical Questions
 
-The game was resumed.
+The following are unresolved:
 
-The user tested the menu and confirmed that the touch area had moved 600 units left.
+1. Does ResourceManager key 11 actually reference `cock.tmh`?
+2. Which embedded texture corresponds to the relevant sub-index?
+3. Do atlas entries 204, 205, 208, and 209 contribute to hamburger rendering?
+4. Which executable instruction draws the persistent hamburger?
+5. Which touch-input region activates it?
+6. Where does its horizontal coordinate originate?
+7. Can its visual and touch positions be modified reliably?
+8. What is the smallest persistent executable patch?
 
-**This is the latest experimentally confirmed result.**
+Do not infer answers from spatial coincidence or unrelated UI controls.
 
-A subsequent recommendation was made to restore X to `1809`, but execution of that restoration has not been confirmed.
+## 9. Recommended Research Direction
 
-### Current runtime state
+**Primary next step:** Resolve the ResourceManager registration chain for key 11 and determine its relationship to the Cockpit texture resource.
 
-The last confirmed running state of PID `29459` has:
+Then investigate whether the candidate atlas records participate in hamburger rendering.
 
-```text
-Left-arrow X = 1209
-```
+If the static mapping proves inconclusive, use Phase 7's confirmed menu-state transition to perform targeted runtime comparisons between hamburger-visible and menu-open states.
 
-The game may have since been restarted or the process may have terminated.
+Once a specific draw call has been identified, use a reversible coordinate modification to confirm its ownership.
 
-Never assume this address or process remains valid in a later session.
+Only then investigate the associated touch region and persistent patch design.
 
----
+Avoid repeating already disproven atlas-564 experiments or spending time on generic state-machine disassembly without a specific hypothesis.
 
-## 11. What Has Not Been Solved
+## 10. Instructions for Future Sessions
 
-Despite the progress, the primary objective is incomplete.
+When continuing FUPatch4iPad:
 
-The following remain unresolved:
+1. Read this document for the objective and project status.
+2. Read `research.md` for the most recent concise findings.
+3. Consult `technical-reference.md` for evidence and function addresses.
+4. Read individual phase reports only when their experimental details are needed.
+5. Preserve the distinction between confirmed findings, hypotheses, and excluded candidates.
+6. Prioritize the hamburger icon, not the previously studied navigation arrow.
+7. Use one or two targeted LLDB commands at a time and inspect their output.
+8. Recalculate all runtime addresses after restarting the application.
+9. Avoid unnecessary changes to the baseline IPA or save data.
+10. Update the current research summary and this handoff after significant milestones.
 
-- The exact rendering path for the persistent hamburger icon.
-- The hamburger icon's associated input-region entry.
-- The correct final horizontal coordinate for the hamburger on the target iPad.
-- The code or data responsible for initializing the relevant hitbox.
-- A reliable method to relocate the hamburger's visuals and interaction together.
-- A persistent binary patch that works without LLDB.
-- Final testing across relevant menus, gameplay states, and application restarts.
+The research reports contain historical observations. An older report describing an experiment as pending does not invalidate a later report that confirms it.
 
-The left-arrow investigation is valuable because it established how the game handles UI geometry and input.
+Likewise, the current research summary should not be treated as evidence that a candidate rendering or hitbox path has been experimentally verified.
 
-However, the final patch should be scoped to the hamburger icon rather than shifting unrelated menu elements.
+## 11. Resume Prompt
 
----
+I'm continuing the FUPatch4iPad reverse-engineering project.
 
-## 12. Recommended Next Steps
+Read `docs/PROJECT_HANDOFF.md`, `docs/research.md`, and `docs/technical-reference.md` before starting.
 
-### Priority 1 — Locate the actual hamburger element
+The objective is to relocate the persistent hamburger menu icon in Monster Hunter Freedom Unite iOS 1.00.11 to the appropriate right-edge position on an iPad Air M2 while preserving size, vertical position, partial clipping, and touch functionality.
 
-Stop treating the left navigation arrow as the final target.
+The hamburger's source pixels have been located in `cock-5`, and atlas entries 204, 205, 208, and 209 are candidates. However, the mapping between ResourceManager key 11, `cock.tmh`, and texture sub-index 0 remains unresolved.
 
-Use the confirmed Cockpit rendering and input architecture to identify the persistent hamburger icon specifically.
+The hamburger's actual rendering call and touch region have not been confirmed.
 
-Determine:
+Please continue from these findings, avoid repeating ruled-out investigations, and favor evidence-driven reverse engineering with small, reversible experiments.
 
-- Which draw calls render the hamburger background and glyph.
-- Whether the icon shares a layout descriptor with other controls.
-- Which input-region entry corresponds to its touch target.
-- Whether the hamburger exists in multiple Cockpit modes or uses different paths.
+## 12. Completion Criteria
 
-### Priority 2 — Correlate visual and touch positions
+The project is complete only when the relocated hamburger:
 
-Once the hamburger's rendering and input references are identified, experimentally move each independently.
+- Renders at the intended horizontal position.
+- Retains its original size, Y position, and partial clipping.
+- Has a correctly aligned functional touch area.
+- Behaves correctly across relevant application states.
+- Survives application restarts.
+- Can be reproduced through documented patch steps.
+- Does not require modifying the immutable baseline IPA or game saves.
 
-Verify the results through direct observation and touch interaction.
-
-Avoid assuming that moving one also moves the other.
-
-### Priority 3 — Find persistent patch locations
-
-Investigate whether the relevant coordinates originate from:
-
-- Static layout descriptors.
-- Runtime initialization routines.
-- Device-dependent calculations.
-- Shared layout logic.
-- Separate rendering and input constants.
-
-Prefer the smallest reliable modification that preserves the behavior of unrelated UI elements.
-
-### Priority 4 — Validate the final patch
-
-The completed patch should be tested for:
-
-- Correct placement along the right edge.
-- Original icon size.
-- Original Y coordinate.
-- Intended partial clipping.
-- Correct touch interaction.
-- Consistency between menu and gameplay states.
-- Persistence after application restart.
-
-Test against a working copy of the IPA while keeping the baseline untouched.
-
----
-
-## 13. Instructions for Future ChatGPT or Codex Sessions
-
-When continuing this project:
-
-1. Read this handoff document first, followed by the phase-specific research documents.
-2. Preserve the exact primary objective.
-3. Distinguish confirmed experimental results from hypotheses.
-4. Do not repeat already validated hitbox experiments unless necessary to verify a new environment.
-5. Do not confuse the left navigation arrow with the hamburger icon.
-6. Treat ASLR-adjusted addresses as process-specific.
-7. Prefer short, sequential LLDB commands and inspect output before issuing further commands.
-8. Avoid lengthy unrelated disassembly or speculative reverse engineering.
-9. Preserve the baseline IPA and existing research files.
-10. Document meaningful discoveries as research milestones.
-
-### Important project preference
-
-Work incrementally.
-
-A good debugging step should answer one specific question, provide evidence, and inform the next step.
-
-Avoid issuing long sequences of speculative LLDB commands without checking intermediate results.
-
-The goal is a reproducible, maintainable patch—not merely a working one-off debugging trick.
-
----
-
-## 14. Suggested Prompt for Resuming in a New Chat
-
-I'm continuing the FUPatch4iPad project.
-
-Read `docs/PROJECT_HANDOFF.md` and the relevant research-phase documents before proposing the next debugging step.
-
-Our objective is to relocate the persistent, partially clipped hamburger menu icon in Monster Hunter Freedom Unite iOS v1.00.11 to the right edge of an iPad Air M2 display, preserving its size, vertical position, clipping, and functional touch area.
-
-We have successfully reverse engineered the Cockpit singleton, menu layout resolver, touch-region array, and left navigation arrow hitbox. Both visual movement and touch-region movement have been verified separately.
-
-The left arrow is only a research reference. The hamburger icon is the actual target.
-
-We also discovered how to launch the game suspended with `devicectl --start-stopped` and attach LLDB before initialization.
-
-Please continue from the documented findings rather than restarting the investigation. Use one or two targeted LLDB commands at a time, distinguish verified facts from hypotheses, and preserve the immutable baseline IPA.
-
-Start by determining the most efficient next step toward identifying the hamburger icon's own rendering and input region.
-
----
-
-## 15. Project Success Criteria
-
-The project can be considered successful when:
-
-- The hamburger icon appears at the intended right-edge position on the target iPad.
-- Its original size and vertical placement are preserved.
-- Its partial clipping is preserved.
-- Its touch region follows the relocated icon.
-- Other UI elements continue functioning normally.
-- The modification survives application restarts.
-- The result can be reproduced from documented patch steps.
-- The original baseline IPA and save data remain protected.
-
-**Current status: Research in progress. The final hamburger patch has not yet been implemented.**
-
----
-
-*End of project handoff.*
+**Current status: Research ongoing; persistent hamburger relocation not yet implemented.**
