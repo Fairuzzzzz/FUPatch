@@ -265,8 +265,28 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
         raise PatchError('source Info.plist has no version — pass --version')
     if not VERSION_RE.match(ver):
         raise PatchError('invalid version %r' % ver)
-    already = (not info['steps_pending'] and not info['remove_pending']
-               and not info['add_pending'])
+    current_plist = plistlib.loads(
+        ziprewrite.read_member(ipa_path, info['info_member']))
+
+    changes = mf.profile_info_changes(m, selected)
+
+    plist_matches = (
+        all(
+            key in current_plist and current_plist[key] == value
+            for key, value in changes.get('set', {}).items()
+        )
+        and all(
+            key not in current_plist
+            for key in changes.get('remove', [])
+        )
+    )
+
+    already = (
+        not info['steps_pending']
+        and not info['remove_pending']
+        and not info['add_pending']
+        and plist_matches
+    )
     if already and ver == info['info_version'] and not dry_run:
         raise PatchError('this IPA is already patched')
 
@@ -297,7 +317,8 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
 
     _emit(on_event, 'plist', 25, 'version %s -> %s' % (info['info_version'], ver))
     raw_plist = ziprewrite.read_member(ipa_path, info['info_member'])
-    new_plist = package.patch_info_plist(raw_plist, m, ver)
+    new_plist = package.patch_info_plist(
+        raw_plist, m, ver, profile=selected)
 
     idx = ziprewrite.read_index(ipa_path)
     names = [_decode(e['name']) for e in idx['entries']]
@@ -360,8 +381,8 @@ def patch(ipa_path, out_path, version=None, keep_fat=False, dry_run=False,
         if back_sha != result_sha:
             raise PatchError('binary in output does not match (sha %s)' % back_sha)
         back_plist = plistlib.loads(ziprewrite.read_member(tmp, info['info_member']))
-        if back_plist.get('CFBundleShortVersionString') != ver:
-            raise PatchError('output version mismatch')
+        if back_plist != plistlib.loads(new_plist):
+            raise PatchError('output Info.plist mismatch')
         os.replace(tmp, out_path)
     except BaseException:
         if os.path.exists(tmp):

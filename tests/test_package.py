@@ -65,6 +65,67 @@ class PackageTest(unittest.TestCase):
         self.assertEqual(out['Extra'], 'tetap')
         self.assertEqual(out['MHFUPatch'], self.m['id'] + ' 2026-10-22')
 
+    def test_info_plist_ipad_profile(self):
+        raw = plistlib.dumps({
+            'CFBundleExecutable': 'MH Unite',
+            'CFBundleIdentifier': 'x.y',
+            'CFBundleShortVersionString': '1.00.11',
+            'CFBundleVersion': '1.00.11',
+            'UILaunchImageFile': 'LaunchImage',
+            'UIDeviceFamily': [1],
+            'Extra': 'preserved',
+        }, fmt=plistlib.FMT_BINARY)
+
+        out = plistlib.loads(package.patch_info_plist(
+            raw, self.m, '1.00.11', profile='ipad-air-m2'))
+
+        self.assertEqual(out['UIDeviceFamily'], [1, 2])
+        self.assertEqual(out['CFBundleExecutable'], 'MH Unite')
+        self.assertEqual(out['CFBundleIdentifier'], 'x.y')
+        self.assertEqual(out['CFBundleShortVersionString'], '1.00.11')
+        self.assertEqual(out['CFBundleVersion'], '1.00.11')
+        self.assertEqual(out['UILaunchStoryboardName'], 'LaunchScreen')
+        self.assertIs(out['UIFileSharingEnabled'], True)
+        self.assertIs(out['LSSupportsOpeningDocumentsInPlace'], True)
+        self.assertNotIn('UILaunchImageFile', out)
+        self.assertEqual(out['Extra'], 'preserved')
+        self.assertEqual(out['MHFUPatch'], self.m['id'])
+
+    def test_info_plist_existing_profiles_unchanged(self):
+        raw = plistlib.dumps({
+            'CFBundleVersion': '1.00.11',
+            'UIDeviceFamily': [1, 2],
+        }, fmt=plistlib.FMT_BINARY)
+
+        default = plistlib.loads(package.patch_info_plist(
+            raw, self.m, '1.00.11'))
+
+        for profile in self.m['profiles']:
+            if profile['id'] == 'ipad-air-m2':
+                continue
+
+            with self.subTest(profile=profile['id']):
+                out = plistlib.loads(package.patch_info_plist(
+                    raw, self.m, '1.00.11',
+                    profile=profile['id']))
+
+                self.assertEqual(out, default)
+                self.assertEqual(out['UIDeviceFamily'], [1])
+
+    def test_info_plist_ipad_deterministic(self):
+        raw = plistlib.dumps({
+            'CFBundleVersion': '1.00.11',
+            'UIDeviceFamily': [1],
+        }, fmt=plistlib.FMT_BINARY)
+
+        a = package.patch_info_plist(
+            raw, self.m, '1.00.11', profile='ipad-air-m2')
+
+        b = package.patch_info_plist(
+            raw, self.m, '1.00.11', profile='ipad-air-m2')
+
+        self.assertEqual(a, b)
+
     def test_info_plist_deterministic(self):
         raw = plistlib.dumps({'CFBundleVersion': '1.00.11'},
                              fmt=plistlib.FMT_BINARY)

@@ -2,6 +2,7 @@ import unittest
 
 from tests.common import RESULT_SHA
 from mhfu_patch import manifest
+from copy import deepcopy
 
 
 class ManifestTest(unittest.TestCase):
@@ -55,7 +56,7 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual([p['id'] for p in profiles], [
             'iphone11-xr', 'iphone11-pro', 'iphone12-14',
             'iphone14pro-15', 'iphone14-15-promax', 'iphone16-17',
-            'ipad-air-m2-loading31-test', 'ipad-air-m2-loading30-test',
+            'ipad-air-m2',
         ])
         self.assertEqual(len({p['id'] for p in profiles}), len(profiles))
         default = manifest.default_profile(self.m)
@@ -70,30 +71,29 @@ class ManifestTest(unittest.TestCase):
                          39)
         self.assertEqual(len(manifest.profile_steps(self.m, 'iphone12-14')),
                          36)
-        loading_test = manifest.select_profile(
-            self.m, 'ipad-air-m2-loading31-test')
-        loading31 = next(s for s in self.m['binary_steps']
-                         if s['id'] == 'loading.31')
-        self.assertEqual(loading_test['overrides'], [
-            {'id': 'loading.31', 'replace': loading31['expect']},
-        ])
+        ipad = manifest.select_profile(self.m, 'ipad-air-m2')
+
+        self.assertFalse(ipad.get('default', False))
+        self.assertEqual(ipad['overrides'], [])
+        self.assertEqual(len(ipad['steps']), 4)
+
         self.assertEqual(
-            loading_test['result_sha256'],
-            '4b87d8b0f59bc4160df9fb7c6c30932fc61e6bed360e103d3f644631fd04c8e1')
-        self.assertEqual(len(manifest.profile_steps(
-            self.m, 'ipad-air-m2-loading31-test')), 36)
-        loading30_test = manifest.select_profile(
-            self.m, 'ipad-air-m2-loading30-test')
-        loading30 = next(s for s in self.m['binary_steps']
-                         if s['id'] == 'loading.30')
-        self.assertEqual(loading30_test['overrides'], [
-            {'id': 'loading.30', 'replace': loading30['expect']},
-        ])
+            ipad['result_sha256'],
+            '1447d7909bce6466cceb9be6eb6341372839757de1a83176a16aa54683ea07c1'
+        )
+
         self.assertEqual(
-            loading30_test['result_sha256'],
-            '63559def58826293ed745916854e44cab0a26b7ae0e895af84f49fa6f31ad0bd')
-        self.assertEqual(len(manifest.profile_steps(
-            self.m, 'ipad-air-m2-loading30-test')), 36)
+            len(manifest.profile_steps(self.m, 'ipad-air-m2')),
+            40
+        )
+
+        self.assertEqual(
+            manifest.find_profile_for_sha(
+                self.m, ipad['result_sha256']
+            )['id'],
+            'ipad-air-m2'
+        )
+
         self.assertIsNone(manifest.find_profile_for_sha(self.m, '00' * 32))
         self.assertEqual(
             manifest.find_profile_for_sha(
@@ -134,9 +134,132 @@ class ManifestTest(unittest.TestCase):
         for (a0, a1), (b0, _b1) in zip(spans, spans[1:]):
             self.assertLessEqual(a1, b0)
 
+    def test_invalid_profile_info_changes(self):
+        invalid_changes = [
+            [],
+            'invalid',
+            {'unknown': True},
+            {'set': []},
+            {'set': {'': True}},
+            {'set': {123: True}},
+            {'remove': 'UIDeviceFamily'},
+            {'remove': ['']},
+            {'remove': [123]},
+            {'remove': ['UIDeviceFamily', 'UIDeviceFamily']},
+            {
+                'set': {'UIDeviceFamily': [1, 2]},
+                'remove': ['UIDeviceFamily'],
+            },
+        ]
+
+        for changes in invalid_changes:
+            with self.subTest(changes=changes):
+                m = deepcopy(self.m)
+                profile = manifest.select_profile(
+                    m, 'ipad-air-m2')
+                profile['info_changes'] = changes
+
+                with self.assertRaises(manifest.ManifestError):
+                    manifest.validate(m)
+
+    def test_default_profile_info_changes_rejected(self):
+        m = deepcopy(self.m)
+
+        profile = manifest.default_profile(m)
+        profile['info_changes'] = {
+            'set': {'UIDeviceFamily': [1, 2]},
+        }
+
+        with self.assertRaises(manifest.ManifestError):
+            manifest.validate(m)
+
+    def test_invalid_base_info_changes(self):
+        invalid_changes = [
+            {'set': []},
+            {'remove': 'UILaunchImageFile'},
+            {'remove': ['UILaunchImageFile', 'UILaunchImageFile']},
+            {
+                'set': {'UIDeviceFamily': [1]},
+                'remove': ['UIDeviceFamily'],
+            },
+        ]
+
+        for changes in invalid_changes:
+            with self.subTest(changes=changes):
+                m = deepcopy(self.m)
+                m['info_changes'] = changes
+
+                with self.assertRaises(manifest.ManifestError):
+                    manifest.validate(m)
+
     def test_unknown_set(self):
         with self.assertRaises(manifest.ManifestError):
             manifest.load_set('missing-set')
+
+    def test_ipad_profile_info_changes(self):
+        from mhfu_patch.manifest import load_set, profile_info_changes
+
+        m = load_set()
+        changes = profile_info_changes(m, 'ipad-air-m2')
+
+        self.assertEqual(changes['set']['UIDeviceFamily'], [1, 2])
+
+
+    def test_existing_profiles_info_changes(self):
+        from mhfu_patch.manifest import load_set, profile_info_changes
+
+        m = load_set()
+
+        for profile in m['profiles']:
+            if profile['id'] == 'ipad-air-m2':
+                continue
+
+            with self.subTest(profile=profile['id']):
+                self.assertEqual(
+                    profile_info_changes(m, profile),
+                    m['info_changes'],
+                )
+
+
+    def test_ipad_preserves_common_info_changes(self):
+        from mhfu_patch.manifest import load_set, profile_info_changes
+
+        m = load_set()
+        expected = dict(m['info_changes']['set'])
+        expected['UIDeviceFamily'] = [1, 2]
+
+        changes = profile_info_changes(m, 'ipad-air-m2')
+
+        self.assertEqual(changes['set'], expected)
+        self.assertEqual(
+            changes['remove'],
+            m['info_changes']['remove'],
+        )
+
+
+    def test_profile_info_changes_merge(self):
+        from mhfu_patch.manifest import profile_info_changes
+
+        m = {
+            'info_changes': {
+                'set': {'A': 1, 'B': 2},
+                'remove': ['C', 'D'],
+            },
+        }
+
+        profile = {
+            'info_changes': {
+                'set': {'A': 10, 'C': 30},
+                'remove': ['B', 'E'],
+            },
+        }
+
+        changes = profile_info_changes(m, profile)
+
+        self.assertEqual(changes['set'], {'A': 10, 'C': 30})
+        self.assertEqual(set(changes['remove']), {'B', 'D', 'E'})
+        self.assertEqual(m['info_changes']['set'], {'A': 1, 'B': 2})
+        self.assertEqual(m['info_changes']['remove'], ['C', 'D'])
 
 
 if __name__ == '__main__':

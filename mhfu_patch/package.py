@@ -2,6 +2,7 @@
 import fnmatch
 import os
 import plistlib
+from .manifest import profile_info_changes
 
 
 class PackageError(ValueError):
@@ -50,9 +51,10 @@ def resolve_additions(spec, names, base_dir):
     return out
 
 
-def patch_info_plist(raw, manifest, version, marker_suffix=None):
+def patch_info_plist(raw, manifest, version, marker_suffix=None,
+                     profile=None):
     pl = plistlib.loads(raw)
-    changes = manifest.get('info_changes') or {}
+    changes = profile_info_changes(manifest, profile)
     for key in changes.get('remove', []):
         pl.pop(key, None)
     for key, value in (changes.get('set') or {}).items():

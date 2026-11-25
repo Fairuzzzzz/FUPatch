@@ -86,6 +86,36 @@ def profile_steps(m, profile=None):
     return steps
 
 
+def profile_info_changes(m, profile=None):
+    """Merge base Info.plist changes with profile-specific changes."""
+    if isinstance(profile, str):
+        profile = select_profile(m, profile)
+
+    if profile is None:
+        profile = default_profile(m)
+
+    base = m.get('info_changes') or {}
+    extra = (profile.get('info_changes') or {}) if profile else {}
+
+    values = dict(base.get('set') or {})
+    removals = dict.fromkeys(base.get('remove') or [])
+
+    # Profile removals override base assignments.
+    for key in extra.get('remove') or []:
+        values.pop(key, None)
+        removals[key] = None
+
+    # Profile assignments override base removals and assignments.
+    for key, value in (extra.get('set') or {}).items():
+        removals.pop(key, None)
+        values[key] = value
+
+    return {
+        'set': values,
+        'remove': list(removals),
+    }
+
+
 def profile_result_sha(m, profile=None):
     """The expected result sha for the selected profile."""
     if isinstance(profile, str):
@@ -106,6 +136,50 @@ def find_profile_for_sha(m, sha):
     return None
 
 
+def validate_info_changes(changes, context='manifest'):
+    """Validate the structure of Info.plist modifications."""
+    if not isinstance(changes, dict):
+        raise ManifestError(
+            '%s: info_changes must be an object' % context)
+
+    unknown = set(changes) - {'set', 'remove'}
+    if unknown:
+        raise ManifestError(
+            '%s: unknown info_changes keys: %s'
+            % (context, ', '.join(sorted(unknown))))
+
+    values = changes.get('set', {})
+    removals = changes.get('remove', [])
+
+    if not isinstance(values, dict):
+        raise ManifestError(
+            '%s: info_changes.set must be an object' % context)
+
+    if not isinstance(removals, list):
+        raise ManifestError(
+            '%s: info_changes.remove must be a list' % context)
+
+    if any(not isinstance(key, str) or not key
+           for key in values):
+        raise ManifestError(
+            '%s: invalid plist assignment key' % context)
+
+    if any(not isinstance(key, str) or not key
+           for key in removals):
+        raise ManifestError(
+            '%s: invalid plist removal key' % context)
+
+    if len(removals) != len(set(removals)):
+        raise ManifestError(
+            '%s: duplicate plist removal keys' % context)
+
+    overlap = set(values) & set(removals)
+    if overlap:
+        raise ManifestError(
+            '%s: conflicting plist changes: %s'
+            % (context, ', '.join(sorted(overlap))))
+
+
 def validate(m):
     need = ('schema', 'id', 'slice', 'binary_steps')
     for key in need:
@@ -113,6 +187,8 @@ def validate(m):
             raise ManifestError('manifest missing key %r' % key)
     if m['schema'] != 1:
         raise ManifestError('unsupported manifest schema: %r' % m['schema'])
+    if 'info_changes' in m:
+        validate_info_changes(m['info_changes'])
     sl = m['slice']
     for key in ('vaddr_base', 'result_sha256'):
         if key not in sl:
@@ -170,6 +246,11 @@ def validate(m):
         if pid in profile_ids:
             raise ManifestError('duplicate profile id %s' % pid)
         profile_ids.add(pid)
+        if 'info_changes' in profile:
+            validate_info_changes(
+                profile['info_changes'],
+                context='profile %s' % pid,
+            )
         presult = profile['result_sha256']
         if not isinstance(presult, str) or len(presult) != 64:
             raise ManifestError('profile %s: result_sha256 is not a sha256' % pid)
@@ -242,7 +323,7 @@ def validate(m):
                         % (pid, aid, bid))
         if profile.get('default'):
             default_count += 1
-            if steps or overrides:
+            if steps or overrides or profile.get('info_changes'):
                 raise ManifestError(
                     'default profile %s must not override anything' % pid)
             if presult.lower() != result.lower():

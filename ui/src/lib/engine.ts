@@ -13,6 +13,11 @@ export interface PatchStep {
   note?: string
 }
 
+export interface InfoChanges {
+  set?: Record<string, unknown>
+  remove?: string[]
+}
+
 export interface PatchProfile {
   id: string
   label: string
@@ -20,7 +25,8 @@ export interface PatchProfile {
   default?: boolean
   result_sha256: string
   overrides?: { id: string; replace: string }[]
-  steps: PatchStep[]
+  steps: PatchStep[],
+  info_changes?: InfoChanges
 }
 
 export interface PatchManifest {
@@ -39,7 +45,7 @@ export interface PatchManifest {
   profiles?: PatchProfile[]
   members_remove: { exact?: string[]; globs?: string[] }
   members_add: { name: string; source?: string; data?: string }[]
-  info_changes: { set?: Record<string, unknown>; remove?: string[] }
+  info_changes: InfoChanges
   version: { marker_key?: string }
 }
 
@@ -170,24 +176,102 @@ function resolveAdditions(
   return out
 }
 
+export function profileInfoChanges(
+  manifest: PatchManifest,
+  profile: PatchProfile | null,
+): InfoChanges {
+  const base = manifest.info_changes ?? {}
+  const extra = profile?.info_changes ?? {}
+
+  const values = { ...base.set }
+  const removals = new Set(base.remove ?? [])
+
+  // Profile removals override base assignments.
+  for (const key of extra.remove ?? []) {
+    delete values[key]
+    removals.add(key)
+  }
+
+  // Profile assignments override base removals and assignments.
+  for (const [key, value] of Object.entries(extra.set ?? {})) {
+    removals.delete(key)
+    values[key] = value
+  }
+
+  return {
+    set: values,
+    remove: [...removals],
+  }
+}
+
+function plistValuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return (
+      a.length === b.length &&
+      a.every((value, index) => plistValuesEqual(value, b[index]))
+    )
+  }
+
+  if (
+    a !== null &&
+    b !== null &&
+    typeof a === 'object' &&
+    typeof b === 'object' &&
+    !Array.isArray(a) &&
+    !Array.isArray(b)
+  ) {
+    const left = a as Record<string, unknown>
+    const right = b as Record<string, unknown>
+
+    const keys = Object.keys(left)
+
+    return (
+      keys.length === Object.keys(right).length &&
+      keys.every(
+        (key) =>
+          Object.prototype.hasOwnProperty.call(right, key) &&
+          plistValuesEqual(left[key], right[key]),
+      )
+    )
+  }
+
+  return false
+}
+
 function patchInfoPlist(
   raw: Uint8Array,
   manifest: PatchManifest,
   version: string,
+  profile: PatchProfile | null,
 ): Uint8Array {
   const value = parsePlist(raw)
+
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new PatchError('Info.plist is not a dictionary')
   }
+
   const plist = value as Record<string, unknown>
-  for (const key of manifest.info_changes.remove ?? []) delete plist[key]
-  for (const [key, item] of Object.entries(manifest.info_changes.set ?? {})) {
+  const changes = profileInfoChanges(manifest, profile)
+
+  for (const key of changes.remove ?? []) {
+    delete plist[key]
+  }
+
+  for (const [key, item] of Object.entries(changes.set ?? {})) {
     plist[key] = item
   }
+
   plist.CFBundleShortVersionString = version
   plist.CFBundleVersion = version
+
   const markerKey = manifest.version.marker_key
-  if (markerKey) plist[markerKey] = manifest.id
+
+  if (markerKey) {
+    plist[markerKey] = manifest.id
+  }
+
   return serializePlist(plist)
 }
 
@@ -350,12 +434,30 @@ export async function patchIpa(
     present,
     options.additions ?? {},
   )
-  if (!applied.length && !removals.size && !additions.length) {
+
+  const changes = profileInfoChanges(manifest, profile)
+
+  const plistMatches =
+    Object.entries(changes.set ?? {}).every(
+      ([key, value]) =>
+        Object.prototype.hasOwnProperty.call(plist, key) &&
+        plistValuesEqual(plist[key], value),
+    ) &&
+    (changes.remove ?? []).every(
+      (key) => !Object.prototype.hasOwnProperty.call(plist, key),
+    )
+
+  if (
+    !applied.length &&
+    !removals.size &&
+    !additions.length &&
+    plistMatches
+  ) {
     throw new PatchError('this IPA is already patched')
   }
 
   emit('plist', 25, 'version ' + version + ' (unchanged)')
-  const newPlist = patchInfoPlist(rawPlist, manifest, version)
+  const newPlist = patchInfoPlist(rawPlist, manifest, version, profile)
   const replacements = new Map<string, Uint8Array>([
     [infoEntry.nameStr, newPlist],
     [exeName, newExe],
