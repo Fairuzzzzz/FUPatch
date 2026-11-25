@@ -1,18 +1,29 @@
 # MHFU UI Reverse-Engineering Research
 
 **Last updated:** November 24, 2026
-**Status:** Ongoing; no hamburger-specific draw call, hitbox, or patch is
-confirmed.
+**Status:** Runtime visual and functional relocation validated across menu cycles; permanent patch pending.
 
 ## Current result
 
-**Atlas index 527 (`0x20F`) is the leading large-hamburger candidate**, not yet runtime-confirmed. The proposed 4× source-coordinate mapping is supported by two tight spatial matches, including the historical runtime navigation-background reference (564).
+**Atlas index 527 (`0x20F`) is runtime-confirmed to render the hamburger.** The proposed 4× source-coordinate mapping is supported by two tight spatial matches, including the historical runtime navigation-background reference (564).
 
 | Index | Unslid record address | Atlas rectangle | Predicted pixels (4×) | Flags | Key |
 |---:|---|---|---|---|---:|
 | 527 (`0x20F`) | `0x10072F9B0` | `(221,147,27,38)` | `(884,588,108,152)` | `0x8004` | 11 |
 | 564 (`0x234`) | `0x10072FB6C` | `(138,185,23,23)` | `(552,740,92,92)` | `0x8004` | 11 |
 
+
+## Runtime milestone
+
+Runtime proof of concept: changing geometry record 1 horizontal offset from -51.0 to -426.0 relocated the visible hamburger and functional touch region, and survived menu cycles (user-observed). Final right-edge placement, exclusive hitbox relocation, backing data and restart persistence remain unverified.
+
+- Geometry record 1, `+0x10` Float32 horizontal offset: runtime address `0x106504870` in PID 30509, slide `0x404000`. Original `-51.0` (`0xC24C0000`); successful test `-426.0` (`0xC3D50000`).
+- Descriptor initialization: `0x1003A35A4`; geometry calculator: `0x10039CFE0`; renderer: `0x1003A37C4`; vertex generator: `0x100378D6C` (unslid).
+- Runtime descriptor 18 used atlas 527 in the observed closed layout. Original A/B/C rectangles: `(2165,169,81,129)`; source offset -150 initialized all three to `(2007,169,81,129)` and reached the draw call but did not visibly move the icon.
+- Direct A.X=1565 moved graphics only. B/C independent edits and read watchpoints gave no useful results; their roles remain unresolved.
+- Array replacement at `Cockpit + 0x12E8` explains loss of direct edits; watchpoint captured clear and reassignment in `0x1003A3280`.
+- A larger upstream offset (-426) produced user-confirmed graphic movement, relocated touch functionality and survival across menu cycles. Exact resulting rectangle and original-hitbox inactivity were not tested.
+- Apparent visual threshold between 1980 and 1990 is provisional; active descriptor addresses were not verified at every trial. No explicit clamp in inspected sprite generator/wrapper or packet pointer setter. Historical safe-area helper remains a lead despite negative API string search.
 
 ## Current texture evidence
 
@@ -36,11 +47,11 @@ PVRTexTool 5.7.1 (Build `26.1@f61b9fab2511`, PVRTexLib v5.7.1) yields spatially 
 ## Hypotheses and blockers
 
 - 4× source-coordinate conversion and key 11/sub-index 4 mapping to `cock-5` are strongly suggested by spatial and historical runtime evidence, but not independently verified in the graphics interpreter or resource registration.
-- Hamburger draw call, destination-coordinate origin, touch region and persistent patch remain unresolved.
+- Exact input consumer, original-hitbox exclusivity, final right-edge position, source backing data and restart-persistent patch remain unresolved.
 
 ## Next action
 
-Attach LLDB to a fresh game process, verify executable identity and obtain the current ASLR slide (`image list -o -f`). Start with a conditional breakpoint at `0x10036C920 + slide` for `$w5 == 527` (sixth integer argument at function entry). Inspect registers and backtrace before making changes. If there is no hit during a verified hamburger-visible state, test the other known indexed helpers, particularly the historically observed `0x100378D6C` path (index at incoming `sp+8` in the atlas-564 experiment; verify the calling convention for the new candidate). `0x100375804` is another candidate (high 32 bits of ninth argument). A missed breakpoint is bounded negative evidence, not a global exclusion. Once the actual draw is captured, verify the destination X argument and perform a reversible position-only experiment; observe whether the hamburger moves and restore debugger state. Do not modify the baseline IPA or investigate the hitbox until rendering ownership is established.
+Verify that the original touch region no longer opens the menu, record the actual successful runtime rectangle, and check unrelated controls. Resolve right-edge placement using the existing game-specific safe-area helper `0x10049E4B4` as a bounded lead; do not assume it causes the apparent threshold. Locate the backing data or initialization source of geometry record 1, check sharing, then design a minimal reversible persistent patch on a working copy. Refresh PID, slide and pointers before any new session; preserve the baseline IPA and saves.
 
 ## Historical leads and exclusions
 

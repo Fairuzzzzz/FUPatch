@@ -3,7 +3,7 @@
 **Project:** FUPatch4iPad  
 **Game:** Monster Hunter Freedom Unite (MH Unite), iOS 1.00.11  
 **Target:** iPad Air 11-inch (M2), iPadOS 18.7.3  
-**Status:** Active reverse engineering  
+**Status:** Successful runtime proof of concept; permanent patch pending  
 **Last reviewed:** November 24, 2026
 
 ---
@@ -98,20 +98,26 @@ PVRTexTool 5.7.1 (Build `26.1@f61b9fab2511`, PVRTexLib v5.7.1) produced revised 
 
 The larger/smaller variants are presumed iPad/iPhone assets, respectively; device selection is not verified. Hamburger size ratios are about 2.37×; navigation variants are 1.4× and differ in composition.
 
-### 4.2 New leading atlas candidate: 527
+### 4.2 Runtime-confirmed hamburger atlas record: 527
 
 | Index | Unslid record address | Atlas rectangle | Predicted pixels (4×) | Flags | Key |
 |---:|---|---|---|---|---:|
 | 527 (`0x20F`) | `0x10072F9B0` | `(221,147,27,38)` | `(884,588,108,152)` | `0x8004` | 11 |
 | 564 (`0x234`) | `0x10072FB6C` | `(138,185,23,23)` | `(552,740,92,92)` | `0x8004` | 11 |
 
-Both records use sub-index 4. Under a proposed 4× mapping, both rectangles contain the measured artwork with plausible margins. Record 564 is historically runtime-confirmed as moving the navigation background, and its archived six fields match the current Ghidra bytes. Record 527 is the strongest large-hamburger candidate, not runtime-confirmed. The 4× mapping and key 11 → `cock.tmh` → sub-index 4 → `cock-5` crosswalk are strongly suggested, not independently established.
+Both records use sub-index 4. Under a proposed 4× mapping, both rectangles contain the measured artwork with plausible margins. Record 564 is historically runtime-confirmed as moving the navigation background, and its archived six fields match the current Ghidra bytes. Record 527 is runtime-confirmed to draw the hamburger by a reversible X-register modification. The 4× mapping and key 11 → `cock.tmh` → sub-index 4 → `cock-5` crosswalk are strongly suggested, not independently established.
 
 The bounded Ghidra search of indices 527–610 with flags `0x8004` and key 11 returned only 527 and 564 for the four measured targets; no smaller variant matched. Zero direct references to record 527 were reported; dynamic indexing remains possible. Former candidates 204/205/208/209 and the old 8× fit are not priorities.
 
 ### 4.3 Static analysis progress
 
 A standalone Ghidra 12.2 project on Intel macOS imported the baseline executable with matching SHA-256. The decompiled texture-selection and indexed-rendering functions corroborate the record structure and separate source/destination geometry. No source-coordinate scaling was observed in the inspected packing helpers. Analysis reported Objective-C analyzer errors and missing native GNU demangler components; the full warning list was truncated. See [technical-reference.md](technical-reference.md) for details.
+
+### 4.4 Successful upstream geometry relocation
+
+Runtime proof of concept: changing geometry record 1 horizontal offset from -51.0 to -426.0 relocated the visible hamburger and functional touch region, and survived menu cycles (user-observed). Final right-edge placement, exclusive hitbox relocation, backing data and restart persistence remain unverified.
+
+The compact layout record (64 bytes) selects geometry index 1 (128-byte records); descriptor initialization creates 112-byte runtime records. The active array pointer at `Cockpit + 0x12E8` changes across menu transitions. Direct rectangle A edits move graphics only and are lost when the array is replaced. The upstream field is `geometry[1] + 0x10`, Float32, at session address `0x106504870` (`-51.0` = `0xC24C0000`; test `-426.0` = `0xC3D50000`). See technical reference for evidence and restoration. This address is session-specific, not a file offset.
 
 ## 5. Confirmed Cockpit and Input Findings
 
@@ -176,7 +182,7 @@ A lower-level atlas-564 modification moved only the left navigation arrow's circ
 
 These findings establish that relevant visual and input positions can be controlled independently.
 
-They do not establish the hamburger's own rendering path.
+These historical experiments did not establish the hamburger path; the later record-527 experiment did.
 
 ## 6. Hamburger State Investigation
 
@@ -250,26 +256,16 @@ Never reuse runtime pointers or ASLR slides from earlier processes.
 
 ## 8. Remaining Technical Questions
 
-The following are unresolved:
-
-1. Does ResourceManager key 11 actually reference `cock.tmh`?
-2. Which embedded texture corresponds to the relevant sub-index?
-3. Does the proposed 4× mapping hold, and does record 527 actually draw the large hamburger?
-4. Which executable instruction draws the persistent hamburger?
-5. Which touch-input region activates it?
-6. Where does its horizontal coordinate originate?
-7. Can its visual and touch positions be modified reliably?
-8. What is the smallest persistent executable patch?
-
-Do not infer answers from spatial coincidence or unrelated UI controls.
+- Is the original hitbox inactive after relocation, and are unrelated controls unaffected?
+- What exact rectangle and clipping result does the successful -426.0 test produce?
+- What causes the apparent visual threshold near X=1980–1990? Is the historical game-specific safe-area helper involved?
+- Is geometry record 1 shared? Where is its original backing data or initialization source?
+- What is the minimal persistent patch and final right-edge offset?
+- The key 11/sub-index 4 resource crosswalk and proposed 4× source mapping remain unverified independently.
 
 ## 9. Recommended Research Direction
 
-**Primary next step: runtime confirmation of atlas index 527.**
-
-Attach LLDB to a fresh game process, verify executable identity and obtain the current ASLR slide (`image list -o -f`). Start with a conditional breakpoint at `0x10036C920 + slide` for `$w5 == 527` (sixth integer argument at function entry). Inspect registers and backtrace before making changes. If there is no hit during a verified hamburger-visible state, test the other known indexed helpers, particularly the historically observed `0x100378D6C` path (index at incoming `sp+8` in the atlas-564 experiment; verify the calling convention for the new candidate). `0x100375804` is another candidate (high 32 bits of ninth argument). A missed breakpoint is bounded negative evidence, not a global exclusion. Once the actual draw is captured, verify the destination X argument and perform a reversible position-only experiment; observe whether the hamburger moves and restore debugger state. Do not modify the baseline IPA or investigate the hitbox until rendering ownership is established.
-
-If needed, use the Phase 7 menu-state indicator for visible/hidden comparisons. Independently verify texture identity and coordinate semantics; do not resume old 8× candidates without new evidence.
+Verify that the original touch region no longer opens the menu, record the actual successful runtime rectangle, and check unrelated controls. Resolve right-edge placement using the existing game-specific safe-area helper `0x10049E4B4` as a bounded lead; do not assume it causes the apparent threshold. Locate the backing data or initialization source of geometry record 1, check sharing, then design a minimal reversible persistent patch on a working copy. Refresh PID, slide and pointers before any new session; preserve the baseline IPA and saves.
 
 ## 10. Instructions for Future Sessions
 
@@ -292,15 +288,11 @@ Likewise, the current research summary should not be treated as evidence that a 
 
 ## 11. Resume Prompt
 
-I'm continuing the FUPatch4iPad reverse-engineering project.
+Continue FUPatch4iPad using `docs/PROJECT_HANDOFF.md`, `docs/research.md`, and `docs/technical-reference.md`. The objective remains right-edge placement with original size, Y, partial clipping and aligned touch region, persistent across launches.
 
-Read `docs/PROJECT_HANDOFF.md`, `docs/research.md`, and `docs/technical-reference.md` before starting.
+Runtime proof of concept: changing geometry record 1 horizontal offset from -51.0 to -426.0 relocated the visible hamburger and functional touch region, and survived menu cycles (user-observed). Final right-edge placement, exclusive hitbox relocation, backing data and restart persistence remain unverified.
 
-The objective is to relocate the persistent hamburger menu icon in Monster Hunter Freedom Unite iOS 1.00.11 to the appropriate right-edge position on an iPad Air M2 while preserving size, vertical position, partial clipping, and touch functionality.
-
-The revised PVRTexTool extraction locates the larger hamburger in `cock-5` at `(890, 593, 102, 142)`; color abnormalities remain. Atlas index 527 (`0x20F`), rectangle `(221,147,27,38)`, flags `0x8004`, key 11, is the leading candidate under the proposed 4× mapping. Record 564 provides a runtime-backed navigation-background reference. Neither the mapping nor hamburger ownership is fully verified.
-
-Next, attach LLDB, obtain the fresh ASLR slide and test a conditional breakpoint for index 527 at `0x10036C920`. Inspect the actual call before attempting a reversible X-position change. The hamburger hitbox and persistent patch remain unknown. Avoid repeating excluded investigations and preserve the baseline IPA and saves.
+Verify that the original touch region no longer opens the menu, record the actual successful runtime rectangle, and check unrelated controls. Resolve right-edge placement using the existing game-specific safe-area helper `0x10049E4B4` as a bounded lead; do not assume it causes the apparent threshold. Locate the backing data or initialization source of geometry record 1, check sharing, then design a minimal reversible persistent patch on a working copy. Refresh PID, slide and pointers before any new session; preserve the baseline IPA and saves.
 
 ## 12. Completion Criteria
 
@@ -314,4 +306,4 @@ The project is complete only when the relocated hamburger:
 - Can be reproduced through documented patch steps.
 - Does not require modifying the immutable baseline IPA or game saves.
 
-**Current status: Research ongoing; persistent hamburger relocation not yet implemented.**
+**Current status: Runtime relocation validated across menu cycles; final placement and restart-persistent patch pending.**

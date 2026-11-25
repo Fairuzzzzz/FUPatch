@@ -71,7 +71,7 @@ Four 12-byte records from the atlas table at `0x10072E0FC` were former candidate
 
 The four rectangles are adjacent cells in the table's regular 16-unit grid. Under the hypothetical 8× mapping, their union is `(1792, 512, 256, 256)`. This overlapped the incorrectly decoded image's hamburger bounds but does not overlap the corrected bounds. Their original justification is invalid; they are unsupported hamburger candidates, not universally excluded by runtime evidence.
 
-Under the same unverified conversion, the corrected bounds in table units would be `(111.25, 74.125, 12.75, 17.75)` (X approximately 111–124, Y approximately 74–92). This is historical only; the current leading 4× candidate is described below. No hamburger index is runtime-confirmed.
+Under the same unverified conversion, the corrected bounds in table units would be `(111.25, 74.125, 12.75, 17.75)` (X approximately 111–124, Y approximately 74–92). This is historical only; the current leading 4× candidate is described below. This was the state of the historical investigation; later runtime evidence confirms index 527.
 
 The records are four distinct entries. Their semantics, whether they render together, the table's relationship to `cock-5`, and the coordinate conversion remain unverified.
 
@@ -105,8 +105,7 @@ its five decoded textures do not provide that registration crosswalk. Key 11 and
 The historical search of enumerated direct callers of `FUN_10036C920` and `FUN_100375804` did not
 establish a selection of indices 204, 205, 208, or 209. This is a bounded
 direct-call result; it does not rule out other table-indexing helpers,
-unresolved dynamic indices, or indirect calls. The hamburger-specific draw
-call remains unknown. The subsequent bounded search identifies index 527 as the leading candidate; see below.
+unresolved dynamic indices, or indirect calls. At that stage the hamburger-specific draw call was unknown. Later runtime confirmation is documented below.
 
 ## Manual Ghidra investigation — November 24, 2026
 
@@ -140,9 +139,9 @@ Search complete.
 FindHamburgerAtlas.java> Finished!
 ```
 
-Neither smaller variant matched within this range/filter; this does not exclude other records, resources or mappings. Show References To `0x10072F9B0` returned zero locations. Dynamic index access is a plausible explanation, not proof of usage. No new runtime experiment occurred in this session.
+Neither smaller variant matched within this range/filter; this does not exclude other records, resources or mappings. Show References To `0x10072F9B0` returned zero locations. Dynamic index access is a plausible explanation, not proof of usage. No new runtime experiment occurred during that static-analysis pass. The subsequent LLDB session is documented below.
 
-### Next runtime experiment
+### Historical planned runtime experiment (superseded)
 
 Attach LLDB to a fresh game process, verify executable identity and obtain the current ASLR slide (`image list -o -f`). Start with a conditional breakpoint at `0x10036C920 + slide` for `$w5 == 527` (sixth integer argument at function entry). Inspect registers and backtrace before making changes. If there is no hit during a verified hamburger-visible state, test the other known indexed helpers, particularly the historically observed `0x100378D6C` path (index at incoming `sp+8` in the atlas-564 experiment; verify the calling convention for the new candidate). `0x100375804` is another candidate (high 32 bits of ninth argument). A missed breakpoint is bounded negative evidence, not a global exclusion. Once the actual draw is captured, verify the destination X argument and perform a reversible position-only experiment; observe whether the hamburger moves and restore debugger state. Do not modify the baseline IPA or investigate the hitbox until rendering ownership is established.
 
@@ -181,6 +180,68 @@ specific geometry or hitbox:
 For exact selector conditions, session-specific values, and historical
 experiment procedures, see the archived
 [Cockpit rendering investigation](archive/cockpit-rendering-investigation.md).
+
+## Runtime hamburger relocation — November 24, 2026
+
+Session: PID 30509, slide `0x404000`. All heap/data runtime addresses below are session observations, not executable file offsets. The baseline executable and saves were not modified during these LLDB experiments.
+
+### Rendering ownership
+
+Conditional breakpoints at unslid `0x10036C920` and `0x100375804` did not hit for the tested conditions. A read watchpoint on atlas 527 at runtime `0x100B339B0` caught thread 13 at `0x10077CE00` (unslid `0x100378E00`); x15 addressed the record. Saved destination registers x19/x20/x22/x21 were 2165/169/81/129. Changing x19 to 1565 at that stop visibly moved the hamburger. Runtime ownership is confirmed; the texture registration/4× mapping remains independently unverified.
+
+Call site `0x1007A8154` (unslid `0x1003A4154`) calls wrapper `0x10077CD14`; atlas index at `[sp+4]`. x1–x4 are destination X/Y/W/H. x19 is Cockpit, x21 descriptor index (18 in closed layout), x24 stride `0x70`. Wrapper passes coordinates unchanged to vertex generator. Generator packs destination corners directly into packet vertices; inspected paths contain no explicit horizontal clamp. `0x10060CE10` is `setPacketBufferPtr` (assertion in ge.cpp), validates and stores pointer only.
+
+### Layout lifecycle and addresses
+
+| Routine | Unslid | Session runtime |
+|---|---|---|
+| Menu transition | `0x10037DBB0` | `0x100781BB0` |
+| Layout wrapper | `0x1003A49A0` | `0x1007A89A0` |
+| Array replacement | `0x1003A3280` | `0x1007A7280` |
+| Descriptor conversion | `0x1003A35A4` | `0x1007A75A4` |
+| Geometry calculation | `0x10039CFE0` | `0x1007A0FE0` |
+| Cockpit renderer | `0x1003A37C4` | `0x1007A77C4` |
+| Render wrapper | `0x100378D14` | `0x10077CD14` |
+| Vertex generator | `0x100378D6C` | `0x10077CD6C` |
+| Packet pointer setter | `0x100208E10` | `0x10060CE10` |
+
+Cockpit `0x1064F9500`; menu flag byte `+0x11B5` (0 closed, 1 open in observed transitions; not a guarantee of visual state during transition). Array pointer `+0x12E8` at `0x1064FA7E8`. Observed bases include `0x1268EE800`, `0x122217200`, `0x122214000`. Old rectangle retained modified X after visible reset because active allocation changed. Watchpoint 6 caught pointer cleared at `0x1007A73E4`, then reassigned at `0x1007A74D0`. Old pointer passed to `0x1008643C4` before clearing (deallocation suspected). Layout pointer table `0x100B34AE8` runtime; layout 21 source pointer `0x10650C720`, count 13 in captured transition. Do not assume descriptor 18 exists in every layout. Array replacement initializes 0x70-byte records, converts 0x40-byte sources, and can append retained records by 0x6E-byte memcpy.
+
+### Record structures
+
+Runtime descriptor: flags +0x08, identifier +0x10, atlas indices +0x14/+0x18, scale floats +0x24/+0x28, rectangles A/B/C +0x2C/+0x34/+0x3C (four 16-bit fields each). Original all `(2165,169,81,129)`. A-only X edit to 1565 moves graphic, not touch; menu cycles replace allocation. B/C-only tests did not move graphic or hitbox; no read watchpoint hits in tested windows. Roles not excluded; stale allocations are a possible confound.
+
+Compact source `0x10650C9E0`: +0x00 identifier 8; +0x04/+0x08 atlas 527; +0x0C geometry index 1; +0x10 flags `0x00010001`; +0x20/+0x24 floats 51/81; +0x30/+0x34 offsets 0/0. Geometry table `0x1065047E0`, stride 0x80, record 1 `0x106504860`.
+
+| Geometry offset | Original value |
+|---|---|
+| +0x00 | 99 (int32) |
+| +0x10/+0x14 | -51 / 106 (float32) |
+| +0x20/+0x24 | 51 / 81 |
+| +0x30/+0x34 | 1 / 1 |
+| +0x40/+0x44 | -51 / 16 |
+| +0x50/+0x54 | 51 / 81 |
+| +0x60/+0x64 | 25.5 / 40.5 |
+
+For type 99 and nonnegative scale multiplier, calculator uses `X = trunc(anchor_x + global_scale * (offset_x - (scale_x - 1) * pivot_x))`; analogous Y. A uses unit multipliers, B uses record +0x30/+0x34. C derives from A plus scaled compact offsets +0x30/+0x34 and scaled dimensions +0x20/+0x24. Negative multiplier branch uses secondary fields +0x40/+0x44/+0x50/+0x54. Exact anchor table semantics and input consumer unverified.
+
+### Reversible source patch and evidence
+
+At breakpoint `0x1007A75D0` condition `*(unsigned int *)($x20 + 4) == 527`, x19 destination, x20 compact record, x21 geometry table, x4 geometry record. Setting source offset -150 (`0xC3160000`) then stepping out yielded A/B/C `(2007,169,81,129)`; renderer call confirmed X=2007 both without menu filter and with flag byte 0. User reported no visible movement. Larger test -426 succeeded visually and functionally and survived menu cycles (user responses Yes/Yes/Yes). Exact final runtime rectangle, original hitbox inactivity, unrelated control effects, and restart persistence not yet verified.
+
+```lldb
+# Stop process and verify current record identity/address before writing.
+# Session-specific example only:
+memory write --size 4 0x106504870 0xC3D50000
+# Restore original -51.0:
+memory write --size 4 0x106504870 0xC24C0000
+```
+
+Regenerate layout by opening/closing menu after resuming. Current session ended with -426 test active; restoration not reported. Breakpoint 3 has auto-continue register trace commands installed but was disabled for successful test; breakpoint 4 and watchpoint 6 were disabled in preceding steps. Confirm debugger state before further tests.
+
+### Apparent boundary and remaining work
+
+User-reported direct X trials: 1565 significantly left; 1800 left; 1900/1950/1980 slightly left; 1990/2000/2007/2165 original. Later trace repeatedly showed X=2007, descriptor 18, not the last manual X=1990. Since the active allocation was not verified for every test, a true clamp is not established. Negative safeArea selector/string search does not exclude game-specific safe-area calculations: existing helper `0x10049E4B4` and historical insets 141/141/0/63 are retained leads, not established causes. Search for viewport/scissor/projection strings returned only setPacketBufferPtr. Other draw sites and downstream transforms remain possible. Avoid speculative deep tracing until final geometry and hitbox verification.
 
 ## Historical contradictions and confidence
 
