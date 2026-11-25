@@ -448,3 +448,21 @@ Original game binaries, patched executables, IPA files, compiled object files, a
 ---
 
 **Phase 11 conclusion:** The persistent hamburger relocation, enlargement, and right-edge gesture-deferral problem has been resolved through a reproducible permanent executable patch. The solution requires no LLDB intervention, injected dynamic library, new imports, or Objective-C method-list restructuring. Production patcher integration is the next development phase.
+
+The updated parameterized CheckCodeCave.java script was
+successfully verified.
+
+Results:
+- Bytes scanned: 1820
+- Nonzero bytes: 0
+- Incoming references: 0
+- Non-executable bytes in Ghidra: 1820
+- Result: CANDIDATE REQUIRES REVIEW
+
+Ghidra classifies the __TEXT.__const memory block as
+non-executable. However, Mach-O segment inspection and
+LLDB runtime inspection independently confirmed r-x
+permissions.
+
+Successful on-device execution further confirmed the
+selected region's suitability for the implemented hooks.
