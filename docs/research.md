@@ -1,7 +1,7 @@
 # MHFU UI Reverse-Engineering Research
 
 **Last updated:** November 24, 2026
-**Status:** Runtime visual and functional relocation validated across menu cycles; permanent patch pending.
+**Status:** Right-edge runtime proof of concept; touch responsiveness unresolved; clean baseline restart next; permanent patch pending.
 
 ## Current result
 
@@ -15,15 +15,15 @@
 
 ## Runtime milestone
 
-Runtime proof of concept: changing geometry record 1 horizontal offset from -51.0 to -426.0 relocated the visible hamburger and functional touch region, and survived menu cycles (user-observed). Final right-edge placement, exclusive hitbox relocation, backing data and restart persistence remain unverified.
+Runtime relocation succeeded across menu cycles. Later rightward tests reached the edge: +50 was too far, +42 reached the edge, and +35 was preferred provisionally. At +35, A/B/C were `(2303,169,81,129)` before hitbox expansion. Expanded C was verified at `(2239,169,145,129)` (bounds 2239,169–2384,298). Ordinary taps remained intermittent; a sustained press (~2 seconds, user estimate) could open the menu, and holding another finger first could make a subsequent hamburger tap respond immediately. Original baseline responsiveness, final alignment/clipping, exclusive hitbox behavior and restart persistence remain unverified.
 
-- Geometry record 1, `+0x10` Float32 horizontal offset: runtime address `0x106504870` in PID 30509, slide `0x404000`. Original `-51.0` (`0xC24C0000`); successful test `-426.0` (`0xC3D50000`).
-- Descriptor initialization: `0x1003A35A4`; geometry calculator: `0x10039CFE0`; renderer: `0x1003A37C4`; vertex generator: `0x100378D6C` (unslid).
-- Runtime descriptor 18 used atlas 527 in the observed closed layout. Original A/B/C rectangles: `(2165,169,81,129)`; source offset -150 initialized all three to `(2007,169,81,129)` and reached the draw call but did not visibly move the icon.
-- Direct A.X=1565 moved graphics only. B/C independent edits and read watchpoints gave no useful results; their roles remain unresolved.
-- Array replacement at `Cockpit + 0x12E8` explains loss of direct edits; watchpoint captured clear and reassignment in `0x1003A3280`.
-- A larger upstream offset (-426) produced user-confirmed graphic movement, relocated touch functionality and survival across menu cycles. Exact resulting rectangle and original-hitbox inactivity were not tested.
-- Apparent visual threshold between 1980 and 1990 is provisional; active descriptor addresses were not verified at every trial. No explicit clamp in inspected sprite generator/wrapper or packet pointer setter. Historical safe-area helper remains a lead despite negative API string search.
+- Atlas 527 draw path, shared geometry record 1, layout replacement and independent compact records for layouts 21/23 are established.
+- A/B are visual geometry (B is read by rendering/interpolation); C is the actual input rectangle, consumed at unslid `0x1003BCDE0`.
+- Touch search `0x100460CB4` rejects ended touches; a captured in-bounds tap `(2343.48,239.01)` had begin=1/end=1 and returned -1.
+- Hamburger flags `0x00010001` disable the optional per-button delay (bit 26); shared counter +0x54 is not checked by initial search.
+- Touch lifecycle is updated through UIKit and CADisplayLink on main thread; hamburger search runs on thread 13. Timing relationship is not established. Conditional breakpoint polling counts (38 idle, 55 additional held) are confounded and not proof of throttling.
+- Earlier apparent X=1980–1990 clamp is not supported by later right-edge success; stale descriptors confounded tests.
+- See [phase 8](phases/research-phase8-hamburger-input.md) for addresses, patches and evidence.
 
 ## Current texture evidence
 
@@ -47,11 +47,11 @@ PVRTexTool 5.7.1 (Build `26.1@f61b9fab2511`, PVRTexLib v5.7.1) yields spatially 
 ## Hypotheses and blockers
 
 - 4× source-coordinate conversion and key 11/sub-index 4 mapping to `cock-5` are strongly suggested by spatial and historical runtime evidence, but not independently verified in the graphics interpreter or resource registration.
-- Exact input consumer, original-hitbox exclusivity, final right-edge position, source backing data and restart-persistent patch remain unresolved.
+- Original baseline responsiveness, final edge placement, exclusive hitbox relocation, backing data and restart-persistent patch remain unresolved. No global touch patch is justified yet.
 
 ## Next action
 
-Verify that the original touch region no longer opens the menu, record the actual successful runtime rectangle, and check unrelated controls. Resolve right-edge placement using the existing game-specific safe-area helper `0x10049E4B4` as a bounded lead; do not assume it causes the apparent threshold. Locate the backing data or initialization source of geometry record 1, check sharing, then design a minimal reversible persistent patch on a working copy. Refresh PID, slide and pointers before any new session; preserve the baseline IPA and saves.
+Fully quit and relaunch MHFU without LLDB; test the original hamburger with ordinary taps. Detach/quit was requested but completion and clean relaunch have not been reported. If baseline is responsive, attach afresh, refresh PID/slide/pointers, apply only the shared geometry X offset (+35 as a starting point), regenerate the layout and retest. Add hitbox changes only if necessary. If baseline is already delayed, investigate input delivery separately. Preserve baseline IPA and saves; no permanent patch yet.
 
 ## Historical leads and exclusions
 

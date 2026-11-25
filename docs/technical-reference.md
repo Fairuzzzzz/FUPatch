@@ -209,7 +209,7 @@ Cockpit `0x1064F9500`; menu flag byte `+0x11B5` (0 closed, 1 open in observed tr
 
 ### Record structures
 
-Runtime descriptor: flags +0x08, identifier +0x10, atlas indices +0x14/+0x18, scale floats +0x24/+0x28, rectangles A/B/C +0x2C/+0x34/+0x3C (four 16-bit fields each). Original all `(2165,169,81,129)`. A-only X edit to 1565 moves graphic, not touch; menu cycles replace allocation. B/C-only tests did not move graphic or hitbox; no read watchpoint hits in tested windows. Roles not excluded; stale allocations are a possible confound.
+Runtime descriptor: flags +0x08, identifier +0x10, atlas indices +0x14/+0x18, scale floats +0x24/+0x28, rectangles A/B/C +0x2C/+0x34/+0x3C (four 16-bit fields each). Original all `(2165,169,81,129)`. A-only X edit to 1565 moves graphic, not touch; menu cycles replace allocation. B/C-only tests did not move graphic or hitbox; no read watchpoint hits in tested windows. Later evidence identifies B as rendering/interpolation geometry and C as input bounds. Earlier negative tests were confounded by stale allocations.
 
 Compact source `0x10650C9E0`: +0x00 identifier 8; +0x04/+0x08 atlas 527; +0x0C geometry index 1; +0x10 flags `0x00010001`; +0x20/+0x24 floats 51/81; +0x30/+0x34 offsets 0/0. Geometry table `0x1065047E0`, stride 0x80, record 1 `0x106504860`.
 
@@ -223,7 +223,7 @@ Compact source `0x10650C9E0`: +0x00 identifier 8; +0x04/+0x08 atlas 527; +0x0C g
 | +0x50/+0x54 | 51 / 81 |
 | +0x60/+0x64 | 25.5 / 40.5 |
 
-For type 99 and nonnegative scale multiplier, calculator uses `X = trunc(anchor_x + global_scale * (offset_x - (scale_x - 1) * pivot_x))`; analogous Y. A uses unit multipliers, B uses record +0x30/+0x34. C derives from A plus scaled compact offsets +0x30/+0x34 and scaled dimensions +0x20/+0x24. Negative multiplier branch uses secondary fields +0x40/+0x44/+0x50/+0x54. Exact anchor table semantics and input consumer unverified.
+For type 99 and nonnegative scale multiplier, calculator uses `X = trunc(anchor_x + global_scale * (offset_x - (scale_x - 1) * pivot_x))`; analogous Y. A uses unit multipliers, B uses record +0x30/+0x34. C derives from A plus scaled compact offsets +0x30/+0x34 and scaled dimensions +0x20/+0x24. Negative multiplier branch uses secondary fields +0x40/+0x44/+0x50/+0x54. Exact anchor table semantics remain unverified. C input consumer is confirmed; see phase 8.
 
 ### Reversible source patch and evidence
 
@@ -237,11 +237,17 @@ memory write --size 4 0x106504870 0xC3D50000
 memory write --size 4 0x106504870 0xC24C0000
 ```
 
-Regenerate layout by opening/closing menu after resuming. Current session ended with -426 test active; restoration not reported. Breakpoint 3 has auto-continue register trace commands installed but was disabled for successful test; breakpoint 4 and watchpoint 6 were disabled in preceding steps. Confirm debugger state before further tests.
+Regenerate layout by opening/closing menu after resuming. This was an intermediate test; later +35 geometry and compact hitbox expansion superseded it. Detach/relaunch requested, not confirmed. Breakpoint 3 has auto-continue register trace commands installed but was disabled for successful test; breakpoint 4 and watchpoint 6 were disabled in preceding steps. Confirm debugger state before further tests.
 
 ### Apparent boundary and remaining work
 
 User-reported direct X trials: 1565 significantly left; 1800 left; 1900/1950/1980 slightly left; 1990/2000/2007/2165 original. Later trace repeatedly showed X=2007, descriptor 18, not the last manual X=1990. Since the active allocation was not verified for every test, a true clamp is not established. Negative safeArea selector/string search does not exclude game-specific safe-area calculations: existing helper `0x10049E4B4` and historical insets 141/141/0/63 are retained leads, not established causes. Search for viewport/scissor/projection strings returned only setPacketBufferPtr. Other draw sites and downstream transforms remain possible. Avoid speculative deep tracing until final geometry and hitbox verification.
+
+## Latest runtime input and right-edge findings
+
+See [phase 8: hamburger input](phases/research-phase8-hamburger-input.md) for the detailed address map, compact record edits, input lifecycle, confirmed rejection and clean-restart protocol. The following supersedes earlier unresolved input-consumer and boundary observations.
+
+Runtime relocation succeeded across menu cycles. Later rightward tests reached the edge: +50 was too far, +42 reached the edge, and +35 was preferred provisionally. At +35, A/B/C were `(2303,169,81,129)` before hitbox expansion. Expanded C was verified at `(2239,169,145,129)` (bounds 2239,169–2384,298). Ordinary taps remained intermittent; a sustained press (~2 seconds, user estimate) could open the menu, and holding another finger first could make a subsequent hamburger tap respond immediately. Original baseline responsiveness, final alignment/clipping, exclusive hitbox behavior and restart persistence remain unverified.
 
 ## Historical contradictions and confidence
 

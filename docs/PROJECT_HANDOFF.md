@@ -3,7 +3,7 @@
 **Project:** FUPatch4iPad  
 **Game:** Monster Hunter Freedom Unite (MH Unite), iOS 1.00.11  
 **Target:** iPad Air 11-inch (M2), iPadOS 18.7.3  
-**Status:** Successful runtime proof of concept; permanent patch pending  
+**Status:** Right-edge runtime proof of concept; touch responsiveness unresolved; clean baseline restart next; permanent patch pending.  
 **Last reviewed:** November 24, 2026
 
 ---
@@ -115,9 +115,11 @@ A standalone Ghidra 12.2 project on Intel macOS imported the baseline executable
 
 ### 4.4 Successful upstream geometry relocation
 
-Runtime proof of concept: changing geometry record 1 horizontal offset from -51.0 to -426.0 relocated the visible hamburger and functional touch region, and survived menu cycles (user-observed). Final right-edge placement, exclusive hitbox relocation, backing data and restart persistence remain unverified.
+Runtime relocation succeeded across menu cycles. Later rightward tests reached the edge: +50 was too far, +42 reached the edge, and +35 was preferred provisionally. At +35, A/B/C were `(2303,169,81,129)` before hitbox expansion. Expanded C was verified at `(2239,169,145,129)` (bounds 2239,169–2384,298). Ordinary taps remained intermittent; a sustained press (~2 seconds, user estimate) could open the menu, and holding another finger first could make a subsequent hamburger tap respond immediately. Original baseline responsiveness, final alignment/clipping, exclusive hitbox behavior and restart persistence remain unverified.
 
 The compact layout record (64 bytes) selects geometry index 1 (128-byte records); descriptor initialization creates 112-byte runtime records. The active array pointer at `Cockpit + 0x12E8` changes across menu transitions. Direct rectangle A edits move graphics only and are lost when the array is replaced. The upstream field is `geometry[1] + 0x10`, Float32, at session address `0x106504870` (`-51.0` = `0xC24C0000`; test `-426.0` = `0xC3D50000`). See technical reference for evidence and restoration. This address is session-specific, not a file offset.
+
+See [latest runtime/input investigation](phases/research-phase8-hamburger-input.md) for the full experiment record.
 
 ## 5. Confirmed Cockpit and Input Findings
 
@@ -256,16 +258,16 @@ Never reuse runtime pointers or ASLR slides from earlier processes.
 
 ## 8. Remaining Technical Questions
 
-- Is the original hitbox inactive after relocation, and are unrelated controls unaffected?
-- What exact rectangle and clipping result does the successful -426.0 test produce?
-- What causes the apparent visual threshold near X=1980–1990? Is the historical game-specific safe-area helper involved?
-- Is geometry record 1 shared? Where is its original backing data or initialization source?
-- What is the minimal persistent patch and final right-edge offset?
-- The key 11/sub-index 4 resource crosswalk and proposed 4× source mapping remain unverified independently.
+- Does the unmodified game exhibit the same touch delay without LLDB?
+- Is +35 the final desired X offset, preserving original size, Y and partial clipping?
+- Does the original hitbox stop responding, and are unrelated controls unaffected?
+- Where is geometry record 1 backed or initialized, and is it shared with other controls?
+- What causes delayed input? Touch-end rejection is confirmed, but its role in normal running is not established.
+- Resource key 11/sub-index 4 mapping and 4× source mapping remain independently unverified.
 
 ## 9. Recommended Research Direction
 
-Verify that the original touch region no longer opens the menu, record the actual successful runtime rectangle, and check unrelated controls. Resolve right-edge placement using the existing game-specific safe-area helper `0x10049E4B4` as a bounded lead; do not assume it causes the apparent threshold. Locate the backing data or initialization source of geometry record 1, check sharing, then design a minimal reversible persistent patch on a working copy. Refresh PID, slide and pointers before any new session; preserve the baseline IPA and saves.
+Fully quit and relaunch MHFU without LLDB; test the original hamburger with ordinary taps. Detach/quit was requested but completion and clean relaunch have not been reported. If baseline is responsive, attach afresh, refresh PID/slide/pointers, apply only the shared geometry X offset (+35 as a starting point), regenerate the layout and retest. Add hitbox changes only if necessary. If baseline is already delayed, investigate input delivery separately. Preserve baseline IPA and saves; no permanent patch yet.
 
 ## 10. Instructions for Future Sessions
 
@@ -290,9 +292,9 @@ Likewise, the current research summary should not be treated as evidence that a 
 
 Continue FUPatch4iPad using `docs/PROJECT_HANDOFF.md`, `docs/research.md`, and `docs/technical-reference.md`. The objective remains right-edge placement with original size, Y, partial clipping and aligned touch region, persistent across launches.
 
-Runtime proof of concept: changing geometry record 1 horizontal offset from -51.0 to -426.0 relocated the visible hamburger and functional touch region, and survived menu cycles (user-observed). Final right-edge placement, exclusive hitbox relocation, backing data and restart persistence remain unverified.
+Runtime relocation succeeded across menu cycles. Later rightward tests reached the edge: +50 was too far, +42 reached the edge, and +35 was preferred provisionally. At +35, A/B/C were `(2303,169,81,129)` before hitbox expansion. Expanded C was verified at `(2239,169,145,129)` (bounds 2239,169–2384,298). Ordinary taps remained intermittent; a sustained press (~2 seconds, user estimate) could open the menu, and holding another finger first could make a subsequent hamburger tap respond immediately. Original baseline responsiveness, final alignment/clipping, exclusive hitbox behavior and restart persistence remain unverified.
 
-Verify that the original touch region no longer opens the menu, record the actual successful runtime rectangle, and check unrelated controls. Resolve right-edge placement using the existing game-specific safe-area helper `0x10049E4B4` as a bounded lead; do not assume it causes the apparent threshold. Locate the backing data or initialization source of geometry record 1, check sharing, then design a minimal reversible persistent patch on a working copy. Refresh PID, slide and pointers before any new session; preserve the baseline IPA and saves.
+Fully quit and relaunch MHFU without LLDB; test the original hamburger with ordinary taps. Detach/quit was requested but completion and clean relaunch have not been reported. If baseline is responsive, attach afresh, refresh PID/slide/pointers, apply only the shared geometry X offset (+35 as a starting point), regenerate the layout and retest. Add hitbox changes only if necessary. If baseline is already delayed, investigate input delivery separately. Preserve baseline IPA and saves; no permanent patch yet.
 
 ## 12. Completion Criteria
 
@@ -306,4 +308,4 @@ The project is complete only when the relocated hamburger:
 - Can be reproduced through documented patch steps.
 - Does not require modifying the immutable baseline IPA or game saves.
 
-**Current status: Runtime relocation validated across menu cycles; final placement and restart-persistent patch pending.**
+**Current status:** Right-edge runtime proof of concept; touch responsiveness unresolved; clean baseline restart next; permanent patch pending.
