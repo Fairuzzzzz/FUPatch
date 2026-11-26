@@ -39,6 +39,7 @@ trap 'rm -f "$COMMANDS"' EXIT
 
 printf 'device select %s\n' "$DEVICE" > "$COMMANDS"
 printf 'device process attach --pid %s\n' "$PID" >> "$COMMANDS"
+printf 'image list -o -f "MH Unite"\n' >> "$COMMANDS"
 
 echo "Starting interactive LLDB for MH Unite (PID $PID) on device $DEVICE..." >&2
 xcrun lldb -s "$COMMANDS"
