@@ -585,7 +585,7 @@ The individual controller inspection and gesture-mask verification outputs were 
 
 ## 15. Proposed Permanent Implementation
 
-The successful runtime changes have not yet been integrated into the permanent binary patch.
+This section records the specification derived from the runtime experiments. Section 18 records the implemented and tested build.
 
 ### 15.1 Shared Geometry Helper
 
@@ -731,32 +731,32 @@ The runtime experiments do not establish compatibility with other iPad models or
 
 ### Permanent Implementation
 
-- [ ] Extend the existing layout assembly helper.
-- [ ] Update the gesture assembly helper.
-- [ ] Verify code cave capacity.
-- [ ] Generate updated binary patch steps.
-- [ ] Verify the patched executable.
-- [ ] Build a test IPA.
-- [ ] Confirm persistence after restarting the game.
+- [x] Extend the existing layout assembly helper.
+- [x] Update the gesture assembly helper.
+- [x] Verify code cave capacity.
+- [x] Generate updated binary patch steps.
+- [x] Verify the patched executable.
+- [x] Build a test IPA.
+- [x] Confirm persistence after restarting the game.
 
 ### Device Regression Testing
 
-- [ ] Items Sort appearance.
-- [ ] Items Sort touch responsiveness.
-- [ ] Combine Sort appearance.
-- [ ] Combine Sort touch responsiveness.
-- [ ] Guild Card Del appearance.
-- [ ] Guild Card Del touch responsiveness.
-- [ ] Guild Card Type appearance.
-- [ ] Guild Card Type touch responsiveness.
-- [ ] Guild Card Comments appearance.
-- [ ] Guild Card Comments touch responsiveness.
+- [x] Items Sort appearance.
+- [x] Items Sort touch responsiveness.
+- [x] Combine Sort appearance.
+- [x] Combine Sort touch responsiveness.
+- [x] Guild Card Del appearance.
+- [x] Guild Card Del touch responsiveness.
+- [x] Guild Card Type appearance.
+- [x] Guild Card Type touch responsiveness.
+- [x] Guild Card Comments appearance.
+- [x] Guild Card Comments touch responsiveness.
 - [ ] Verify consistent heights across the Guild Card bottom-row buttons.
 - [ ] Verify that non-whitelisted geometry records remain unchanged.
 - [ ] Verify the unidentified geometry index 35 when its associated interface becomes accessible.
-- [ ] Hamburger appearance remains unchanged.
-- [ ] Hamburger right-edge responsiveness.
-- [ ] Bottom system gesture remains accessible.
+- [x] Hamburger appearance remains unchanged.
+- [x] Hamburger right-edge responsiveness.
+- [x] Bottom system gesture remains accessible.
 - [ ] Other gameplay controls remain functional.
 
 ### Production Integration
@@ -769,29 +769,32 @@ The runtime experiments do not establish compatibility with other iPad models or
 - [ ] Run regression tests.
 - [ ] Build the production web interface.
 - [ ] Update README.
-- [ ] Commit and push Phase 13.
+- [ ] Release the combined Phase 13 and Phase 14 production patch.
 
-## 18. Conclusion
+## 18. Permanent implementation and validation
 
-Phase 13 runtime research successfully identified a shared button atlas entry and four associated geometry records.
+Verification reproduced the final arm64 executable from the original IPA by applying the 36 common ranges to its arm64 slice, then applying the four ranges exported by the developer builder. The common baseline SHA-256 is `25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4`. The final executable is 8,593,744 bytes and its SHA-256 is **`e2c04d018c032e027c3d6ab996f5843d2384903b3517d71f2488f8f0649587c1`**.
 
-The initial investigation established that geometry index 27 controls both Sort buttons in the Items and Combine menus, as well as the Del button in the Guild Card menu.
+| Range | Unslid start | Bytes |
+|---|---:|---:|
+| Layout entry branch | `0x1003A35D0` | 4 |
+| UI layout helper | `0x10049E900` | 200 |
+| Startup gesture entry branch | `0x1003545D0` | 4 |
+| Gesture helper | `0x10049EA00` | 156 |
+| **Total** | | **364** |
 
-The preferred visual correction increases the original button height from 72.0 to 128.0 while retaining the original X and Y offsets, widths, and scale factors.
+Renaming `hamburger_hook` to `ui_layout_hook` first reproduced the Phase 12 executable byte for byte. In Phase 13 the first hamburger identifier mismatch branches to the appended matcher at `0x10049E964`. The original five hamburger stores and return branch retain their Phase 12 encodings. The appended matcher requires compact ID `0x8000`, both atlas indices equal to 556, geometry type 105, and index 25, 26, 27, or 35. It writes 128.0f to geometry offsets `+0x24` and `+0x54` and compact offset `+0x24`. All paths use only `w8` as scratch and rejoin the displaced `ldrsw x8, [x4]` before returning to `0x1003A35D4`.
 
-Following successful runtime testing, the correction was expanded to include geometry indices 25, 26, 27, and 35.
+The layout helper leaves 56 bytes before the gesture helper. At `0x10049EA4C`, the gesture method now returns the bottom/right mask with `mov x0, #12` (bytes `80 01 80 D2`). The startup helper still replays the displaced ADRP and returns to `0x1003545D4`.
 
-The remaining bottom-edge touch interference was resolved during runtime testing by extending the existing right-edge gesture deferral to include the bottom edge.
+### Automated verification
 
-The proposed permanent implementation consists of two changes:
+162 Python tests and 7 TypeScript profile tests passed. Assembled-instruction tests exercised the hamburger, all four whitelisted indices, signature mismatches, rejected indices, and repeat conversion. They checked the complete synthetic records and signed load result. Disassembly confirmed the branch destinations. The builder verified the baseline bytes at all four ranges, and a separate comparison confirmed all 8,593,380 bytes outside those ranges matched the baseline.
 
-1. Extend the existing layout helper to modify the height fields of the four explicitly whitelisted geometry records.
-2. Update the existing gesture helper to return the combined bottom-edge and right-edge mask (`0x0C`).
+### Physical device validation
 
-The combined runtime correction produced acceptable results in the observed menus.
+The device tester confirmed that Items Sort, Combine Sort, and Guild Card Type, Comments, and Del worked on the iPad Air M2 with the experimental IPA. Bottom-edge taps registered, the hamburger retained its appearance and responded to right-edge taps, and the system home gesture remained accessible. The corrections persisted after restarting the game.
 
-Geometry index 35 remains unidentified and has not been independently validated in its intended interface. Its inclusion is intentional, and this limitation remains documented for future investigation.
+**Geometry index 35 still has no identified visible owner.** Its record passed the automated height tests. Its individual on-screen behavior remains unverified.
 
-**Phase 13 status: Expanded runtime solution validated in observed menus. Permanent implementation pending.**
-
-The Loading text clipping issue remains outside the scope of Phase 13 and will be investigated in Phase 14.
+Production integration is deferred until Phase 14 is complete so the shared-button and loading-text corrections can enter the production patcher together. Cross-engine parity for that combined profile belongs to the production integration stage.
