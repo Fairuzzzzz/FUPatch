@@ -80,7 +80,7 @@ class TestBuildSteps(unittest.TestCase):
         )
 
     def test_step_count(self):
-        self.assertEqual(len(self.steps), 4)
+        self.assertEqual(len(self.steps), 6)
 
     def test_ui_layout_hook(self):
         step = self.steps[0]
@@ -140,7 +140,26 @@ class TestBuildSteps(unittest.TestCase):
             for step in self.steps
         )
 
-        self.assertEqual(total, 364)
+        self.assertEqual(total, 372)
+
+    def test_loading_instructions(self):
+        dimension, origin = self.steps[4:]
+        self.assertEqual(dimension["vaddr"], "0x100441CC4")
+        self.assertEqual(origin["vaddr"], "0x10049E628")
+        source = bytearray(0x49E630)
+        source[0x441CC4:0x441CC8] = bytes.fromhex("0110271e")
+        source[0x49E620:] = bytes.fromhex("13814079 697e0253 7302090b ad8efe17")
+        result = apply_steps(source, [dimension, origin])
+        self.assertEqual(result[0x441CC4:0x441CC8], bytes.fromhex("0190261e"))
+        self.assertEqual(result[0x49E620:], bytes.fromhex("13814079 697e0253 7302094b ad8efe17"))
+        self.assertEqual(len(result), len(source))
+        for offset in (0x441CC4, 0x49E628):
+            with self.subTest(offset=offset):
+                bad = source.copy()
+                bad[offset] ^= 1
+                with self.assertRaisesRegex(BuildError, "Original bytes mismatch"):
+                    apply_steps(bad, [dimension, origin])
+        self.assertEqual(self.steps, build_steps(self.ui_layout, self.gesture))
 
     def test_layout_must_fit_before_gesture(self):
         with self.assertRaisesRegex(BuildError, "overlaps gesture"):
@@ -471,7 +490,7 @@ class TestBuildPatch(unittest.TestCase):
             )
 
         self.assertEqual(result, expected)
-        self.assertEqual(len(steps), 4)
+        self.assertEqual(len(steps), 6)
 
 
 if __name__ == "__main__":

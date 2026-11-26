@@ -1,4 +1,4 @@
-# Research Phase 14 — Loading Text Position Correction
+# Research Phase 14 — Loading Text Size and Position Correction
 
 ## 1. Overview
 
@@ -6,11 +6,9 @@ Phase 14 investigates the partially off-screen "NOW LOADING" artwork observed wh
 
 Unlike the shared button geometry issue addressed in Phase 13, this issue concerns animated loading artwork and does not require touch hitbox correction.
 
-The objective is to reposition the loading lettering so that the complete phrase is visible within the native iPad display while preserving its original artwork, dimensions, spacing, and animation.
+The correction reduces glyph dimensions and moves the starting horizontal coordinate so the complete loading phrase fits the native iPad display.
 
-Production integration of Phase 13 and Phase 14 will be performed together after both permanent corrections have been validated on physical hardware.
-
-**Status: Static research in progress. Candidate correction identified. Runtime validation pending.**
+**Status.** The permanent builder reproduces the device-tested v5 executable byte for byte. Separate hardware validation of the permanent build and combined Phase 13/14 production integration remain pending. Sections 3–15 preserve the investigation through the initial NOP hypothesis.
 
 ---
 
@@ -988,7 +986,7 @@ The actual screen displacement depends on the renderer's coordinate transformati
 
 ### 15.3 Validation Status
 
-The candidate has not been applied to an executable or tested on physical hardware.
+At this checkpoint the NOP candidate awaited device testing. Section 19 records the subsequent experiments.
 
 Removing the complete adjustment may move the phrase farther left than desired. A smaller adjustment or another positioning calculation may be preferable after examining the original initialization logic.
 
@@ -1034,134 +1032,49 @@ The atlas discovery script returned zero matches but remains useful for document
 
 ---
 
-## 18. Next Investigation Steps
+## 18. Coordinate initialization and selection
 
-The next static investigation should examine the original containing function:
+The containing function starts at `0x100441AFC`. The inherited `loading.29` patch at `0x100441B58` selects graphics-engine field offset `0x80234` in place of `0x80230`. The function caches the floating-point scale at `0x10074B994`. It multiplies each coordinate constant by that scale and converts the result to a 16-bit integer.
 
-```text
-0x100441AFC
-```
+| Table address | Unscaled coordinate |
+|---|---:|
+| `0x10074B9D0` | 194 |
+| `0x10074B9D2` | 194 |
+| `0x10074B9D4` | 314 |
+| `0x10074B9D6` | 218 |
+| `0x10074B9D8` | 266 |
+| `0x10074B9DA` | 194 |
+| `0x10074B9DC` | 194 |
 
-In particular, inspect the instructions preceding:
+At `0x1004420C4` the renderer reads a signed index from `System_object + 0x58B19DC`. At `0x1004420D0` it selects the glyph sequence using an eight-byte stride. At `0x1004420D8` it adds twice the same index to `x24` (`0x10074B990`). The inherited helper then reads the selected halfword at offset `+0x40`. This suggests a language-specific coordinate table. The language-to-index mapping and precise meaning of the graphics-engine scale fields remain unresolved.
 
-```text
-0x1004420DC
-```
+## 19. Device experiments
 
-Questions to resolve:
+The Phase 13 combination (approximately 1.25× horizontal origin, glyph constant 24.0) clipped the phrase. The table gives user-reported observations and SHA-256 hashes independently checked against the saved executables.
 
-1. Where is `x8` initialized?
-2. What structure contains the original horizontal origin at offset `+0x40`?
-3. How is this original value calculated or initialized?
-4. Does the origin already account for display dimensions or aspect ratio?
-5. Does the original position provide an appropriate iPad right margin?
-6. Is removing the entire 25-percent adjustment preferable to reducing it?
+| Build | Approx. origin multiplier | Glyph constant | Device observation | Executable SHA-256 |
+|---|---:|---:|---|---|
+| v1 | 1.00 | 24.0 | NOW LOAD visible | `e4dd8f112dfdbe8c425ef513d290bec79e7049639b9356ca28ec0727fb1e736c` |
+| v2 | 0.75 | 24.0 | NOW LOADIN and part of G visible | `991f00bdf1df02d1e07d1e9df91faa34cf9ac1b4d4cad842db69209e97336ff0` |
+| v3 | 0.50 | 24.0 | Entire phrase visible, glyphs oversized | `e77e9eb4a942881d590b050cd54f1f76ad094f4f0bc2fbe014fc867634be5bcc` |
+| v4 | 0.50 | 20.0 | Improved glyph size, excessive right margin | `488e96aea1b88d2cf645e4460bea9ad1b337e3cc7d736694c1522b0b879250e6` |
+| v5 | 0.75 | 20.0 | Satisfactory size and positioning | `ff26548f0e32f240e01c30e2e172bd005087b43ea1a517527bc84668339be10e` |
 
-After resolving these questions, generate a separate Phase 14 experimental executable based on the validated Phase 13 executable.
+The tester confirmed satisfactory loading text and gameplay regression checks for v5 on iPad Air (M2), iPadOS 18.7.3. These observations cover the tested gameplay. Per-language coverage and individually instrumented runtime results remain unverified.
 
-Because the loading screen is transient, a standalone experimental IPA may be more convenient than modifying executable instructions through LLDB.
+## 20. Permanent builder and verification
 
-The final correction must be validated on physical hardware before permanent integration.
+The builder assembles the four Phase 13 ranges and appends two four-byte instruction replacements on the common patched arm64 baseline. It checks the expected bytes at each address and pins the final executable hash. The six ranges cover 372 bytes.
 
----
+| Unslid address | File offset | Expected → replacement (little endian) | Instruction change |
+|---|---|---|---|
+| `0x100441CC4` | `0x441CC4` | `0110271e` → `0190261e` | `fmov s1, #24.0` → `fmov s1, #20.0` |
+| `0x10049E628` | `0x49E628` | `7302090b` → `7302094b` | `add w19, w19, w9` → `sub w19, w19, w9` |
 
-## 19. Validation Checklist
+The dimension constant is five sixths of its previous value before multiplication and integer truncation. The horizontal helper at `0x10049E620` contains `13814079 697e0253 7302094b ad8efe17`. Disassembly confirmed the unsigned halfword load, two-bit logical right shift, subtraction, and return to `0x1004420E0`. The result is exactly `x - floor(x/4)`, including for coordinates with a remainder, e.g. 194 becomes 146.
 
-### Resource Research
+The permanent executable matches v5 across all 8,593,744 bytes. Its SHA-256 is **`ff26548f0e32f240e01c30e2e172bd005087b43ea1a517527bc84668339be10e`**. Relative to Phase 13, only file offsets `0x441CC5`, `0x441CC6`, and `0x49E62B` differ. Rebuilding reproduced the executable and all six exported steps, including the four original Phase 13 steps.
 
-- [x] Inspect cockpit textures for loading artwork.
-- [x] Identify candidate system resources from PSP research.
-- [x] Locate corresponding iOS TMH resources.
-- [x] Extract default and English resources.
-- [x] Identify embedded PVR headers and payloads.
-- [x] Confirm duplicate first texture.
-- [x] Decode shared system texture.
-- [x] Identify individual loading glyphs.
-- [x] Measure visible glyph coordinates.
+All 64 focused tests passed. Full Python discovery passed 162 tests and skipped the missing 1.00.186 fixture test. That test subsequently passed using a temporary reconstructed intermediate verified against its known hash. All seven TypeScript profile regression tests passed.
 
-### Static Analysis
-
-- [x] Search for conventional cockpit atlas records.
-- [x] Search for uniform glyph grid records.
-- [x] Document negative atlas search results.
-- [x] Identify localized resource string addresses.
-- [x] Identify resource filename registry.
-- [x] Confirm localized file IDs.
-- [x] Identify generic filename lookup and loading functions.
-- [x] Inspect inherited loading-related manifest entries.
-- [x] Identify existing injected loading helpers.
-- [x] Identify the loading glyph rendering loop.
-- [x] Identify the horizontal glyph origin register.
-- [x] Identify the inherited 25-percent horizontal adjustment.
-- [x] Define a candidate four-byte correction.
-- [ ] Inspect the original containing function.
-- [ ] Identify the original horizontal origin initialization.
-- [ ] Determine the preferred final positioning adjustment.
-
-### Experimental Implementation
-
-- [ ] Generate a separate Phase 14 experimental executable.
-- [ ] Verify expected original bytes before modification.
-- [ ] Verify the resulting instruction encoding.
-- [ ] Verify unrelated executable bytes remain unchanged.
-- [ ] Record experimental executable SHA-256.
-- [ ] Package a separate experimental IPA.
-
-### Physical Device Validation
-
-- [ ] Verify complete "NOW LOADING" phrase visibility.
-- [ ] Verify appropriate right-edge alignment.
-- [ ] Verify glyph dimensions remain unchanged.
-- [ ] Verify glyph spacing remains unchanged.
-- [ ] Verify vertical animation remains unchanged.
-- [ ] Verify loading background appearance.
-- [ ] Verify loading-related map rendering.
-- [ ] Verify loading transitions across multiple areas.
-- [ ] Verify Phase 13 button corrections remain functional.
-- [ ] Verify hamburger correction and edge gestures remain functional.
-- [ ] Verify behavior after restarting the game.
-
-### Permanent Implementation
-
-- [ ] Select final permanent correction.
-- [ ] Update reproducible patch builder.
-- [ ] Add regression tests.
-- [ ] Verify permanent executable.
-- [ ] Validate permanent build on physical hardware.
-- [ ] Update Phase 14 documentation.
-- [ ] Commit implementation and research documentation.
-
-### Production Integration
-
-- [ ] Integrate Phase 13 and Phase 14 corrections.
-- [ ] Preserve existing iPhone profile behavior and hashes.
-- [ ] Verify Python and TypeScript parity.
-- [ ] Rebuild production web patcher.
-- [ ] Validate production-generated IPA on physical hardware.
-- [ ] Update README and production integration documentation.
-
----
-
-## 20. Conclusion
-
-Phase 14 research successfully identified the shared system texture containing the animated loading glyphs.
-
-Two static atlas discovery attempts returned no matches using the cockpit atlas record format.
-
-The subsequent resource registry investigation established the localized system resource file IDs and generic loading infrastructure.
-
-The most productive investigation path was ultimately provided by the inherited loading-related patch addresses.
-
-Static analysis of the existing injected helpers and the loading glyph rendering loop identified the horizontal position register and an inherited adjustment that increases the initial horizontal origin by approximately 25 percent.
-
-A minimal four-byte candidate correction has been identified at:
-
-```text
-0x10049E628
-```
-
-The proposed replacement removes the additional horizontal offset while preserving the original origin and glyph rendering logic.
-
-The candidate requires further investigation and physical device validation.
-
-**Phase 14 status: Loading renderer identified. Suspected root cause established through static analysis. Candidate correction identified but not yet tested.**
+Separate installation of the permanent build remains pending. Combined production integration must account for the instruction at `0x10049E628` inside the common `safe-area.34` replacement starting at `0x10049E4B4`. The production engines apply ranges to the original executable. An iPad-specific replacement must preserve the common bytes used by the iPhone profiles and avoid overlapping ranges. Production parity and device testing of the production-generated IPA remain open.

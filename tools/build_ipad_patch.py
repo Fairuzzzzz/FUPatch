@@ -1,5 +1,5 @@
 
-"""Build the experimental Phase 13 MHFU iPad executable patch.
+"""Build the experimental Phase 14 MHFU iPad executable patch.
 
 This developer tool requires macOS and Xcode command-line tools.
 It does not modify the input executable or package an IPA.
@@ -27,8 +27,8 @@ SOURCE_SHA256 = (
 )
 
 RESULT_SHA256 = (
-    "e2c04d018c032e027c3d6ab996f5843d"
-    "2384903b3517d71f2488f8f0649587c1"
+    "ff26548f0e32f240e01c30e2e172bd00"
+    "5087b43ea1a517527bc84668339be10e"
 )
 
 UI_LAYOUT_HOOK = 0x1003A35D0
@@ -204,7 +204,7 @@ def build_steps(
     ui_layout: bytes,
     gesture: bytes,
 ) -> list[dict]:
-    """Construct the four verified binary patch steps."""
+    """Construct the six verified binary patch steps."""
 
     if UI_LAYOUT_CAVE + len(ui_layout) > GESTURE_CAVE:
         raise BuildError("UI layout helper overlaps gesture helper")
@@ -247,6 +247,15 @@ def build_steps(
             GESTURE_CAVE,
             bytes(GESTURE_SIZE),
             gesture,
+        ),
+        make_step(
+            "ipad.loading.glyph_dimension", 0x100441CC4,
+            bytes.fromhex("0110271e"), bytes.fromhex("0190261e"),  # fmov s1, #20
+        ),
+        # This instruction is inside the common safe-area.34 replacement.
+        make_step(
+            "ipad.loading.horizontal_origin", 0x10049E628,
+            bytes.fromhex("7302090b"), bytes.fromhex("7302094b"),  # sub w19, w19, w9
         ),
     ]
 
@@ -303,7 +312,7 @@ def apply_steps(
 
 
 def build_patch(source: bytes) -> tuple[bytes, list[dict]]:
-    """Build the Phase 13 executable from the verified common baseline."""
+    """Build the Phase 14 executable from the verified common baseline."""
 
     actual_sha = sha256(source)
 
@@ -324,7 +333,7 @@ def build_patch(source: bytes) -> tuple[bytes, list[dict]]:
 
     if actual_sha != RESULT_SHA256:
         raise BuildError(
-            "Result does not match the expected Phase 13 executable\n"
+            "Result does not match the expected Phase 14 executable\n"
             f"Expected: {RESULT_SHA256}\n"
             f"Actual:   {actual_sha}"
         )
