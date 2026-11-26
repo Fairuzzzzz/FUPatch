@@ -1,10 +1,10 @@
 
-// MHFU iOS 1.00.11 — iPad hamburger geometry and hitbox hook.
+// MHFU iOS 1.00.11 — iPad hamburger and shared button layout.
 //
 // Hook:   0x1003A35D0
 // Cave:   0x10049E900
 // Return: 0x1003A35D4
-// Size:   100 bytes
+// Size:   200 bytes
 //
 // Registers at entry:
 //   x19: Destination descriptor
@@ -17,14 +17,14 @@
 
 .text
 .p2align 2
-.globl _hamburger_hook
+.globl _ui_layout_hook
 
-_hamburger_hook:
+_ui_layout_hook:
 
-    // Verify compact record type.
+    // The hamburger path keeps its Phase 12 stores and return address.
     ldr     w8, [x20, #0x00]
     cmp     w8, #8
-    b.ne    original
+    b.ne    Lshared_button
 
     // Verify both atlas indices.
     ldr     w8, [x20, #0x04]
@@ -66,3 +66,35 @@ original:
 
     // Branch from 0x10049E960 to 0x1003A35D4.
     .inst   0x17fc131d
+
+Lshared_button:
+    // w8 still holds the full compact identifier. 8 << 12 is 0x8000.
+    cmp     w8, #8, lsl #12
+    b.ne    original
+    ldr     w8, [x20, #0x04]
+    cmp     w8, #556
+    b.ne    original
+    ldr     w8, [x20, #0x08]
+    cmp     w8, #556
+    b.ne    original
+    ldr     w8, [x4]
+    cmp     w8, #105
+    b.ne    original
+
+    // Index 35 shares this geometry signature. Its control is unidentified.
+    ldr     w8, [x20, #0x0c]
+    cmp     w8, #25
+    b.eq    Lextend_height
+    cmp     w8, #26
+    b.eq    Lextend_height
+    cmp     w8, #27
+    b.eq    Lextend_height
+    cmp     w8, #35
+    b.ne    original
+
+Lextend_height:
+    movz    w8, #0x4300, lsl #16    // 128.0f
+    str     w8, [x4, #0x24]
+    str     w8, [x4, #0x54]
+    str     w8, [x20, #0x24]
+    b       original

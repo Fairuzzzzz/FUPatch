@@ -10,9 +10,9 @@ from tools.build_ipad_patch import (
     BASE,
     SOURCE_SHA256,
     RESULT_SHA256,
-    HAMBURGER_HOOK,
-    HAMBURGER_CAVE,
-    HAMBURGER_SIZE,
+    UI_LAYOUT_HOOK,
+    UI_LAYOUT_CAVE,
+    UI_LAYOUT_SIZE,
     GESTURE_HOOK,
     GESTURE_CAVE,
     GESTURE_SIZE,
@@ -71,41 +71,41 @@ class TestMakeStep(unittest.TestCase):
 class TestBuildSteps(unittest.TestCase):
 
     def setUp(self):
-        self.hamburger = bytes([0xAA]) * HAMBURGER_SIZE
+        self.ui_layout = bytes([0xAA]) * UI_LAYOUT_SIZE
         self.gesture = bytes([0xBB]) * GESTURE_SIZE
 
         self.steps = build_steps(
-            self.hamburger,
+            self.ui_layout,
             self.gesture,
         )
 
     def test_step_count(self):
         self.assertEqual(len(self.steps), 4)
 
-    def test_hamburger_hook(self):
+    def test_ui_layout_hook(self):
         step = self.steps[0]
 
         self.assertEqual(
             int(step["vaddr"], 0),
-            HAMBURGER_HOOK,
+            UI_LAYOUT_HOOK,
         )
         self.assertEqual(step["expect"], "880080b9")
         self.assertEqual(step["replace"], "ccec0314")
 
-    def test_hamburger_cave(self):
+    def test_ui_layout_cave(self):
         step = self.steps[1]
 
         self.assertEqual(
             int(step["vaddr"], 0),
-            HAMBURGER_CAVE,
+            UI_LAYOUT_CAVE,
         )
         self.assertEqual(
             bytes.fromhex(step["expect"]),
-            bytes(HAMBURGER_SIZE),
+            bytes(UI_LAYOUT_SIZE),
         )
         self.assertEqual(
             bytes.fromhex(step["replace"]),
-            self.hamburger,
+            self.ui_layout,
         )
 
     def test_gesture_hook(self):
@@ -140,15 +140,19 @@ class TestBuildSteps(unittest.TestCase):
             for step in self.steps
         )
 
-        self.assertEqual(total, 264)
+        self.assertEqual(total, 364)
 
-    def test_invalid_hamburger_size(self):
+    def test_layout_must_fit_before_gesture(self):
+        with self.assertRaisesRegex(BuildError, "overlaps gesture"):
+            build_steps(bytes(GESTURE_CAVE - UI_LAYOUT_CAVE + 4), self.gesture)
+
+    def test_invalid_ui_layout_size(self):
         with self.assertRaises(BuildError):
             build_steps(b"\x00", self.gesture)
 
     def test_invalid_gesture_size(self):
         with self.assertRaises(BuildError):
-            build_steps(self.hamburger, b"\x00")
+            build_steps(self.ui_layout, b"\x00")
 
 
 class TestApplySteps(unittest.TestCase):
@@ -428,7 +432,7 @@ class TestBuildPatch(unittest.TestCase):
         ), patch(
             "tools.build_ipad_patch.assemble",
             side_effect=[
-                bytes(HAMBURGER_SIZE),
+                bytes(UI_LAYOUT_SIZE),
                 bytes(GESTURE_SIZE),
             ],
         ), patch(
@@ -454,7 +458,7 @@ class TestBuildPatch(unittest.TestCase):
         ), patch(
             "tools.build_ipad_patch.assemble",
             side_effect=[
-                bytes(HAMBURGER_SIZE),
+                bytes(UI_LAYOUT_SIZE),
                 bytes(GESTURE_SIZE),
             ],
         ), patch(

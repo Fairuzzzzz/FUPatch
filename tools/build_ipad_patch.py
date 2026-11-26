@@ -1,5 +1,5 @@
 
-"""Reproduce the device-tested MHFU iPad executable patch.
+"""Build the experimental Phase 13 MHFU iPad executable patch.
 
 This developer tool requires macOS and Xcode command-line tools.
 It does not modify the input executable or package an IPA.
@@ -27,13 +27,13 @@ SOURCE_SHA256 = (
 )
 
 RESULT_SHA256 = (
-    "1447d7909bce6466cceb9be6eb6341372"
-    "839757de1a83176a16aa54683ea07c1"
+    "e2c04d018c032e027c3d6ab996f5843d"
+    "2384903b3517d71f2488f8f0649587c1"
 )
 
-HAMBURGER_HOOK = 0x1003A35D0
-HAMBURGER_CAVE = 0x10049E900
-HAMBURGER_SIZE = 100
+UI_LAYOUT_HOOK = 0x1003A35D0
+UI_LAYOUT_CAVE = 0x10049E900
+UI_LAYOUT_SIZE = 200
 
 GESTURE_HOOK = 0x1003545D0
 GESTURE_CAVE = 0x10049EA00
@@ -201,19 +201,22 @@ def make_step(
 
 
 def build_steps(
-    hamburger: bytes,
+    ui_layout: bytes,
     gesture: bytes,
 ) -> list[dict]:
     """Construct the four verified binary patch steps."""
 
-    if len(hamburger) != HAMBURGER_SIZE:
-        raise BuildError("Unexpected hamburger helper size")
+    if UI_LAYOUT_CAVE + len(ui_layout) > GESTURE_CAVE:
+        raise BuildError("UI layout helper overlaps gesture helper")
+
+    if len(ui_layout) != UI_LAYOUT_SIZE:
+        raise BuildError("Unexpected UI layout helper size")
 
     if len(gesture) != GESTURE_SIZE:
         raise BuildError("Unexpected gesture helper size")
 
-    hamburger_branch = instruction_bytes(
-        encode_branch(HAMBURGER_HOOK, HAMBURGER_CAVE)
+    ui_layout_branch = instruction_bytes(
+        encode_branch(UI_LAYOUT_HOOK, UI_LAYOUT_CAVE)
     )
 
     gesture_branch = instruction_bytes(
@@ -222,16 +225,16 @@ def build_steps(
 
     return [
         make_step(
-            "ipad.hamburger.hook",
-            HAMBURGER_HOOK,
+            "ipad.ui_layout.hook",
+            UI_LAYOUT_HOOK,
             bytes.fromhex("880080b9"),
-            hamburger_branch,
+            ui_layout_branch,
         ),
         make_step(
-            "ipad.hamburger.cave",
-            HAMBURGER_CAVE,
-            bytes(HAMBURGER_SIZE),
-            hamburger,
+            "ipad.ui_layout.cave",
+            UI_LAYOUT_CAVE,
+            bytes(UI_LAYOUT_SIZE),
+            ui_layout,
         ),
         make_step(
             "ipad.gesture.hook",
@@ -300,7 +303,7 @@ def apply_steps(
 
 
 def build_patch(source: bytes) -> tuple[bytes, list[dict]]:
-    """Reproduce the known-working combined executable."""
+    """Build the Phase 13 executable from the verified common baseline."""
 
     actual_sha = sha256(source)
 
@@ -311,17 +314,17 @@ def build_patch(source: bytes) -> tuple[bytes, list[dict]]:
             f"Actual:   {actual_sha}"
         )
 
-    hamburger = assemble(ASM_DIR / "hamburger_hook.s")
+    ui_layout = assemble(ASM_DIR / "ui_layout_hook.s")
     gesture = assemble(ASM_DIR / "gesture_hook.s")
 
-    steps = build_steps(hamburger, gesture)
+    steps = build_steps(ui_layout, gesture)
     result = apply_steps(source, steps)
 
     actual_sha = sha256(result)
 
     if actual_sha != RESULT_SHA256:
         raise BuildError(
-            "Result does not match the device-tested executable\n"
+            "Result does not match the expected Phase 13 executable\n"
             f"Expected: {RESULT_SHA256}\n"
             f"Actual:   {actual_sha}"
         )
@@ -401,7 +404,7 @@ def main():
 
     print()
     print("Combined patch reproduced successfully")
-    print("Hamburger helper:", HAMBURGER_SIZE, "bytes")
+    print("UI layout helper:", UI_LAYOUT_SIZE, "bytes")
     print("Gesture helper:", GESTURE_SIZE, "bytes")
     print("Binary patch steps:", len(steps))
     print("Output SHA-256:", sha256(result))

@@ -12,13 +12,13 @@ from tools.arm64_encoding import (
 
 class TestBranchEncoding(unittest.TestCase):
 
-    def test_hamburger_entry(self):
+    def test_ui_layout_entry(self):
         self.assertEqual(
             encode_branch(0x1003A35D0, 0x10049E900),
             0x1403ECCC,
         )
 
-    def test_hamburger_return(self):
+    def test_ui_layout_return(self):
         self.assertEqual(
             encode_branch(0x10049E960, 0x1003A35D4),
             0x17FC131D,

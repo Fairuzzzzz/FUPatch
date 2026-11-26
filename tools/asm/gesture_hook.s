@@ -1,5 +1,5 @@
 
-// MHFU iOS 1.00.11 — iPad right-edge gesture deferral.
+// MHFU iOS 1.00.11 — iPad bottom- and right-edge gesture deferral.
 //
 // Hook:   0x1003545D0
 // Cave:   0x10049EA00
@@ -9,7 +9,7 @@
 // Registers preferredScreenEdgesDeferringSystemGestures
 // on RootViewController before UIApplicationMain.
 //
-// The custom method returns UIRectEdgeRight (8).
+// The custom method returns UIRectEdgeBottom | UIRectEdgeRight (12).
 //
 // All address-dependent instructions are encoded for
 // the intended virtual address of this helper.
@@ -71,8 +71,7 @@ done:
 
 gesture_method:
 
-    // UIRectEdgeRight.
-    mov     x0, #8
+    mov     x0, #12
     ret
 
 selector_function_name:
