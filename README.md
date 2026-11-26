@@ -6,8 +6,8 @@ patched build with: safe area/HUD, analog, loading text & background, map
 position, coating frame aligned with the bar, and MFi controller support.
 
 The patch also supports **native iPad gameplay on iPad Air (M2)**, with an
-enlarged and repositioned hamburger button and improved responsiveness near
-the right screen edge through system gesture deferral.
+enlarged hamburger button, taller shared bottom-row buttons, corrected loading
+text size and position, and gesture deferral at the bottom and right edges.
 
 
 The web UI patches the IPA **entirely in the browser**: the file never leaves
@@ -39,12 +39,12 @@ This project is unofficial and is not affiliated with, endorsed by, or sponsored
 
 - The iPhone 11 / XR profile adds three null-guard ranges (39 total).
 - Other iPhone profiles override the safe-area and UI-scale constants.
-- The iPad Air (M2) profile adds four permanent binary patch ranges
-  covering 264 bytes (40 ranges / 1,272 bytes total). These implement
-  hamburger geometry correction and system gesture deferral.
+- The iPad Air 11-inch profile adds five ranges covering 368 bytes
+  (41 ranges / 1,376 bytes total). It also overrides one byte within
+  the common `safe-area.34` replacement for the loading text origin.
 - binary becomes **thin arm64** (8,593,744 B)
 - `Info.plist`: profile-specific `UIDeviceFamily` (`[1]` for iPhone profiles,
-  `[1, 2]` for iPad Air M2), `UILaunchStoryboardName`,
+  `[1, 2]` for the iPad profile), `UILaunchStoryboardName`,
   2 Bluetooth permission keys (MFi controller), `UIFileSharingEnabled` and
   `LSSupportsOpeningDocumentsInPlace` (save data visible in the Files app),
   patch marker
@@ -130,7 +130,7 @@ binary patches, and customize `Info.plist` settings.
 | `iphone14pro-15` | iPhone 14 Pro, 15 | 177 / 177 / 0 / 63 | 1.6 | 3x, 59 pt; needs device test |
 | `iphone14-15-promax` | iPhone 14 Pro Max, 15 Plus, 15 Pro Max | 177 / 177 / 0 / 63 | 1.764 | 3x, 59 pt; needs device test |
 | `iphone16-17` | iPhone 16 / 17 (generic) | 177 / 177 / 0 / 63 | 1.6 | fallback, not per-model |
-| `ipad-air-m2` | iPad Air (M2) | inherited | inherited | native iPad; device-tested |
+| `ipad-air-m2` | iPad Air 11-inch | inherited | inherited | production IPA validated on iPad Air (M2) |
 
 The **iPhone 12 / 13 / 14** profile remains the default and is
 binary-identical to the original patch.
@@ -145,15 +145,17 @@ The `ipad-air-m2` profile provides:
 
 - Native iPad rendering through `UIDeviceFamily = [1, 2]`.
 - Enlarged and repositioned hamburger button.
-- System gesture deferral along the right screen edge.
+- Taller shared buttons in the Items, Combine, and Guild Card menus.
+- System gesture deferral along the bottom and right edges.
+- Smaller loading glyphs and a corrected starting horizontal position.
 - All common binary and packaging patches.
 - Permanent binary modifications without runtime injection or LLDB.
 
-To use this profile, select **iPad Air (M2)** in the web interface
+To use this profile, select **iPad Air 11-inch** in the web interface
 and patch the original decrypted IPA. No intermediate IPA or additional
 conversion tool is required.
 
-The production profile has been tested on iPad Air (M2).
+The production executable matches the permanent Phase 14 build and the experimental v5 executable tested on iPad Air (M2). The tester also confirmed that the game is fully working on that device with the production-generated IPA. Rebuild from the original IPA when updating from Phase 12.
 Compatibility with other iPad models and iPadOS versions is not
 yet established.
 
@@ -226,7 +228,7 @@ The patcher verifies itself before writing the output:
    the default `iphone12-14` result is
    `25ff0f7ea91f58b2e1531080d9a9c55e9363f7a66031b1da89abf193826f92b4`
    The production `ipad-air-m2` result is
-   `1447d7909bce6466cceb9be6eb6341372839757de1a83176a16aa54683ea07c1`.
+   `ff26548f0e32f240e01c30e2e172bd005087b43ea1a517527bc84668339be10e`.
 
 The CLI additionally re-reads the executable, version, and parsed Info.plist
 contents from the written IPA.
@@ -324,12 +326,12 @@ ZIP compression and plist serialization differences.
 
 ## Research documentation
 
-The iPad reverse-engineering work has produced a permanent hamburger
-geometry correction and system gesture deferral patch, integrated into
-both production patching engines.
+The shared production manifest includes the permanent layout, gesture, and loading text corrections for iPad.
 
 - [Phase 11 — Permanent iPad patch](docs/phases/research-phase11-permanent-ipad-patch.md)
-- [Phase 12 — Production integration](docs/phases/phase12-production-integration.md)
+- [Phase 12 — Production integration](docs/phases/research-phase12-production-integration.md)
+- [Phase 13 — Shared button geometry](docs/phases/research-phase13-sort-button.md)
+- [Phase 14 — Loading text size and position](docs/phases/research-phase14-loading-text.md)
 - [Research overview](docs/research.md)
 - [Technical reference](docs/technical-reference.md)
 

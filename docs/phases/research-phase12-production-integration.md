@@ -256,3 +256,13 @@ device support research.
 - [x] Final production web build.
 - [x] Git diff review.
 - [ ] Commit and push.
+
+## Subsequent production integration of Phases 13 and 14
+
+The profile now displays as **iPad Air 11-inch**. Its ID remains `ipad-air-m2` and its device family remains `[1, 2]`. Five additional ranges (368 bytes) implement the hamburger and shared bottom-row button geometry, bottom/right gesture deferral, and the 20.0 loading glyph dimension. The horizontal origin instruction belongs to the common 456-byte `safe-area.34` range. Its iPad replacement override changes only byte `+0x177` from `0b` to `4b`, retaining the original source-byte expectation. The common step and six iPhone profiles retain their previous payloads. Rebuild from the original IPA for this revision.
+
+Both production engines reproduced every profile's executable hash. The six iPhone comparisons used the verified original arm64 slice in a small fixture archive for TypeScript. Full original-IPA parity was checked for iPad: each archive contained 14,204 members. Reading every member verified ZIP integrity. All payloads matched byte for byte except Info.plist, whose parsed contents matched, including UIDeviceFamily. Different plist serializations produced different archive hashes.
+
+The production executable matched the permanent Phase 14 executable and experimental v5 across all 8,593,744 bytes, SHA-256 `ff26548f0e32f240e01c30e2e172bd005087b43ea1a517527bc84668339be10e`. The experimental v5 was tested on iPad Air (M2). The tester subsequently confirmed that the game is fully working with the production-generated IPA on the physical iPad Air (M2). This completes production integration and validation for Phases 13 and 14 on that model. Compatibility with other iPad models and generations remains unverified.
+
+Full regression passed all 163 Python tests, including the API and original-IPA CLI tests, and all seven TypeScript profile tests. The full run used a temporary, hash-verified reconstruction of the intermediate fixture. The production browser build passed TypeScript compilation and Vite bundling.

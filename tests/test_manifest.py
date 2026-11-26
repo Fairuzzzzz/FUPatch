@@ -74,17 +74,24 @@ class ManifestTest(unittest.TestCase):
         ipad = manifest.select_profile(self.m, 'ipad-air-m2')
 
         self.assertFalse(ipad.get('default', False))
-        self.assertEqual(ipad['overrides'], [])
-        self.assertEqual(len(ipad['steps']), 4)
+        self.assertEqual(ipad['label'], 'iPad Air 11-inch')
+        common = next(s for s in self.m['binary_steps'] if s['id'] == 'safe-area.34')
+        expected = bytearray.fromhex(common['replace'])
+        self.assertEqual(len(expected), 456)
+        self.assertEqual(expected[0x174:0x178].hex(), '7302090b')
+        expected[0x177] = 0x4b
+        self.assertEqual(ipad['overrides'], [{'id': common['id'], 'replace': expected.hex()}])
+        self.assertEqual(sum(len(bytes.fromhex(s['replace'])) for s in ipad['steps']), 368)
+        self.assertEqual(len(ipad['steps']), 5)
 
         self.assertEqual(
             ipad['result_sha256'],
-            '1447d7909bce6466cceb9be6eb6341372839757de1a83176a16aa54683ea07c1'
+            'ff26548f0e32f240e01c30e2e172bd005087b43ea1a517527bc84668339be10e'
         )
 
         self.assertEqual(
             len(manifest.profile_steps(self.m, 'ipad-air-m2')),
-            40
+            41
         )
 
         self.assertEqual(

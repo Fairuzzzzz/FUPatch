@@ -210,7 +210,7 @@ function App() {
               {PROFILES.length > 0 && (
                 <div className="mt-5">
                   <div className="mb-2 flex items-baseline justify-between">
-                    <span className="text-[12px] font-medium">iPhone model</span>
+                    <span className="text-[12px] font-medium">Device model</span>
                     <span className="text-[11px] text-neutral-400">Pick one</span>
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">

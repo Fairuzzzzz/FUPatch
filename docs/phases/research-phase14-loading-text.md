@@ -8,7 +8,7 @@ Unlike the shared button geometry issue addressed in Phase 13, this issue concer
 
 The correction reduces glyph dimensions and moves the starting horizontal coordinate so the complete loading phrase fits the native iPad display.
 
-**Status.** The permanent builder reproduces the device-tested v5 executable byte for byte. Separate hardware validation of the permanent build and combined Phase 13/14 production integration remain pending. Sections 3–15 preserve the investigation through the initial NOP hypothesis.
+**Status.** The permanent builder reproduces the device-tested v5 executable byte for byte. Combined Phase 13 and Phase 14 production integration and validation are complete. The tester confirmed that the game is fully working with the production-generated IPA on iPad Air (M2). Sections 3–15 preserve the investigation through the initial NOP hypothesis.
 
 ---
 
@@ -36,7 +36,7 @@ The preceding Phase 13 implementation was validated on physical hardware and com
 | `5574845` | Permanent shared button height and gesture correction |
 | `39e70ec` | Phase 13 implementation and device validation documentation |
 
-Phase 13 production integration remains intentionally deferred.
+At this checkpoint, Phase 13 production integration was deferred so both corrections could ship together.
 
 ### 2.2 Executable Baselines
 
@@ -1010,9 +1010,9 @@ The final integration approach must account for:
 
 The Phase 14 correction is intended to affect the iPad profile only.
 
-No decision has yet been made regarding the final manifest representation.
+At this stage of the investigation, the final manifest representation was still undecided.
 
-Production integration of Phases 13 and 14 remains deferred until Phase 14 device validation succeeds.
+The team deferred combined integration until device testing of the Phase 14 correction succeeded.
 
 ---
 
@@ -1077,4 +1077,6 @@ The permanent executable matches v5 across all 8,593,744 bytes. Its SHA-256 is *
 
 All 64 focused tests passed. Full Python discovery passed 162 tests and skipped the missing 1.00.186 fixture test. That test subsequently passed using a temporary reconstructed intermediate verified against its known hash. All seven TypeScript profile regression tests passed.
 
-Separate installation of the permanent build remains pending. Combined production integration must account for the instruction at `0x10049E628` inside the common `safe-area.34` replacement starting at `0x10049E4B4`. The production engines apply ranges to the original executable. An iPad-specific replacement must preserve the common bytes used by the iPhone profiles and avoid overlapping ranges. Production parity and device testing of the production-generated IPA remain open.
+The production profile applies an iPad-specific replacement override to the common `safe-area.34` range starting at `0x10049E4B4`. This incorporates the instruction at `0x10049E628` while preserving the iPhone profile payloads. Both production engines reproduced the permanent executable byte for byte. Hardware validation covers the production-generated IPA on iPad Air (M2).
+
+For the subsequent production integration and its verification results, see the [combined production integration record](research-phase12-production-integration.md#subsequent-production-integration-of-phases-13-and-14).

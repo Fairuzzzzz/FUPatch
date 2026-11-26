@@ -761,14 +761,15 @@ The runtime experiments do not establish compatibility with other iPad models or
 
 ### Production Integration
 
-- [ ] Update the iPad Air (M2) profile.
-- [ ] Update expected executable hashes.
-- [ ] Verify Python patcher.
-- [ ] Verify TypeScript patcher.
-- [ ] Verify patcher parity.
-- [ ] Run regression tests.
-- [ ] Build the production web interface.
-- [ ] Update README.
+- [x] Update the iPad Air 11-inch profile (`ipad-air-m2`).
+- [x] Update expected executable hashes.
+- [x] Verify Python patcher.
+- [x] Verify TypeScript patcher.
+- [x] Verify patcher parity.
+- [x] Run regression tests.
+- [x] Build the production web interface.
+- [x] Update README.
+- [x] Validate the combined production IPA on iPad Air (M2).
 - [ ] Release the combined Phase 13 and Phase 14 production patch.
 
 ## 18. Permanent implementation and validation
@@ -797,4 +798,6 @@ The device tester confirmed that Items Sort, Combine Sort, and Guild Card Type, 
 
 **Geometry index 35 still has no identified visible owner.** Its record passed the automated height tests. Its individual on-screen behavior remains unverified.
 
-Production integration is deferred until Phase 14 is complete so the shared-button and loading-text corrections can enter the production patcher together. Cross-engine parity for that combined profile belongs to the production integration stage.
+Phase 13 and Phase 14 production integration and validation are complete. The tester confirmed that the game is fully working with the combined production IPA on iPad Air (M2).
+
+For the subsequent production integration and its verification results, see the [combined production integration record](research-phase12-production-integration.md#subsequent-production-integration-of-phases-13-and-14).
