@@ -451,6 +451,61 @@ Replacement: 00 00 00 43
 
 These modifications represent the successful runtime experiment. The generated rectangles were not independently dumped again after the final height extension.
 
+### 12.3 Expanded Height Correction
+
+Following the successful height extension of geometry index 27, the remaining three discovered geometry records were investigated for a consistent button layout.
+
+All four records originally shared the following properties:
+
+- Primary Y offset: -72.0
+- Secondary Y offset: -72.0
+- Height: 72.0
+- Scale: 0.8
+- Geometry type: 105 (`0x69`)
+- Compact identifier: `0x8000`
+- Both atlas indices: 556 (`0x22C`)
+
+The height correction was expanded to include geometry indices 25, 26, 27, and 35.
+
+| Geometry index | Original height | Modified height | Y offset |
+|---|---:|---:|---:|
+| 25 (`0x19`) | 72.0 | 128.0 | -72.0 |
+| 26 (`0x1A`) | 72.0 | 128.0 | -72.0 |
+| 27 (`0x1B`) | 72.0 | 128.0 | -72.0 |
+| 35 (`0x23`) | 72.0 | 128.0 | -72.0 |
+
+The original X offsets, widths, and scale factors were preserved.
+
+#### Runtime Modification Addresses
+
+| Geometry index | Primary height | Secondary height | Compact height |
+|---|---|---|---|
+| 25 | `0x10832D484` | `0x10832D4B4` | `0x108334744` |
+| 26 | `0x10832D504` | `0x10832D534` | `0x108334784` |
+| 27 | `0x10832D584` | `0x10832D5B4` | `0x1083347C4` |
+| 35 | `0x10832D984` | `0x10832D9B4` | `0x108334C04` |
+
+All twelve height fields were assigned `0x43000000`, representing the IEEE 754 single-precision value 128.0.
+
+The original Y offsets were also restored to ensure that no previous positioning experiments remained active.
+
+The combined runtime modification was tested on the physical iPad and produced an acceptable visual result in the observed menus.
+
+#### Expanded Control Mapping
+
+| Geometry index | Associated controls | Identification status |
+|---|---|---|
+| 25 | Guild Card Type | Visual evidence |
+| 26 | Guild Card Comments | Inferred |
+| 27 | Items Sort, Combine Sort, Guild Card Del | Confirmed |
+| 35 | Unknown | Unresolved |
+
+Geometry index 35 may belong to an online multiplayer interface. However, this remains an unverified hypothesis.
+
+Despite its unresolved ownership, index 35 was intentionally included in the proposed permanent correction because it shares the same original vertical offsets, height, scale, atlas indices, compact identifier, and geometry type as the other three records.
+
+Its associated visible control has not yet been individually validated.
+
 ## 13. Bottom-Edge Touch Interference
 
 After the successful height extension, the enlarged Sort button remained unresponsive near the extreme bottom screen edge.
@@ -536,29 +591,56 @@ The successful runtime changes have not yet been integrated into the permanent b
 
 The existing hamburger layout helper is a suitable candidate for extension.
 
-The proposed Sort/Del matching conditions are:
+The proposed shared button matching conditions are:
 
-```text
+```
 Compact identifier == 0x8000
 First atlas index  == 556
 Second atlas index == 556
-Geometry index     == 27
 Geometry type      == 105
+
+Geometry index must be one of:
+    25 (0x19)
+    26 (0x1A)
+    27 (0x1B)
+    35 (0x23)
 ```
 
-Once these conditions are satisfied, the helper should assign 128.0 to:
+Conceptually, the new helper logic is equivalent to:
 
-```text
-Geometry record + 0x24
-Geometry record + 0x54
-Compact record  + 0x24
+```c
+if (compact->identifier == 0x8000 &&
+    compact->atlas1 == 556 &&
+    compact->atlas2 == 556 &&
+    geometry->type == 105 &&
+    (compact->geometry_index == 25 ||
+     compact->geometry_index == 26 ||
+     compact->geometry_index == 27 ||
+     compact->geometry_index == 35))
+{
+    geometry->primary_height = 128.0f;
+    geometry->secondary_height = 128.0f;
+    compact->height = 128.0f;
+}
 ```
 
-All other geometry fields should remain unchanged.
+The following fields should be modified:
+
+| Record | Offset | Replacement |
+|---|---|---|
+| Geometry | `+0x24` | `0x43000000` |
+| Geometry | `+0x54` | `0x43000000` |
+| Compact | `+0x24` | `0x43000000` |
+
+All other geometry fields must remain unchanged.
+
+The original Y offsets do not require permanent modification. Restoring them during runtime testing was only necessary to undo earlier positioning experiments.
 
 The existing hamburger-specific matching conditions and modifications must be preserved.
 
-The shared geometry helper must not modify every record using atlas index 556, since that atlas entry is reused by other controls.
+The helper must explicitly whitelist the four discovered geometry indices rather than modifying every record using atlas index 556.
+
+The inclusion of geometry index 35 is intentional despite its unresolved control ownership. Any additional matching geometry records discovered in the future must be investigated separately before expanding the whitelist.
 
 ### 15.2 Gesture Helper
 
@@ -603,17 +685,30 @@ Before production integration:
 
 ## 16. Scope and Potential Side Effects
 
-Geometry index 27 is shared by multiple controls.
+The expanded Phase 13 correction targets four shared button geometry records:
 
-The proposed height correction therefore affects:
+- Geometry index 25.
+- Geometry index 26.
+- Geometry index 27.
+- Geometry index 35.
 
+The currently identified or inferred affected controls include:
+
+- Guild Card Type.
+- Guild Card Comments.
+- Guild Card Del.
 - Items Sort.
 - Combine Sort.
-- Guild Card Del.
 
-Other buttons using atlas index 556 must remain unchanged unless separately investigated.
+Additional controls may reuse these geometry records.
 
-Bottom-edge gesture deferral applies at the view-controller level rather than only to the Sort button. Its effect on other gameplay controls and system gesture accessibility must be verified.
+Geometry index 35 remains unidentified. It is suspected to belong to an online multiplayer interface, but this has not been verified. Its inclusion in the permanent patch is an intentional design decision based on its matching geometry characteristics.
+
+The combined runtime modification produced acceptable results in the observed menus. However, this does not establish that every affected control has been visually or functionally validated.
+
+Other geometry records using atlas index 556 must remain unchanged unless separately investigated.
+
+Bottom-edge gesture deferral applies at the view-controller level rather than to individual buttons. Its effect on other gameplay controls and system gesture accessibility must be verified.
 
 The runtime experiments do not establish compatibility with other iPad models or operating system versions.
 
@@ -652,7 +747,13 @@ The runtime experiments do not establish compatibility with other iPad models or
 - [ ] Combine Sort touch responsiveness.
 - [ ] Guild Card Del appearance.
 - [ ] Guild Card Del touch responsiveness.
-- [ ] Guild Card Type and Comments remain unchanged.
+- [ ] Guild Card Type appearance.
+- [ ] Guild Card Type touch responsiveness.
+- [ ] Guild Card Comments appearance.
+- [ ] Guild Card Comments touch responsiveness.
+- [ ] Verify consistent heights across the Guild Card bottom-row buttons.
+- [ ] Verify that non-whitelisted geometry records remain unchanged.
+- [ ] Verify the unidentified geometry index 35 when its associated interface becomes accessible.
 - [ ] Hamburger appearance remains unchanged.
 - [ ] Hamburger right-edge responsiveness.
 - [ ] Bottom system gesture remains accessible.
@@ -672,14 +773,25 @@ The runtime experiments do not establish compatibility with other iPad models or
 
 ## 18. Conclusion
 
-Phase 13 runtime research successfully identified the shared geometry responsible for both Sort buttons and the Guild Card Del button.
+Phase 13 runtime research successfully identified a shared button atlas entry and four associated geometry records.
 
-The preferred visual correction increases the original button height from 72.0 to 128.0 while retaining the original positioning offsets, width, and scale.
+The initial investigation established that geometry index 27 controls both Sort buttons in the Items and Combine menus, as well as the Del button in the Guild Card menu.
+
+The preferred visual correction increases the original button height from 72.0 to 128.0 while retaining the original X and Y offsets, widths, and scale factors.
+
+Following successful runtime testing, the correction was expanded to include geometry indices 25, 26, 27, and 35.
 
 The remaining bottom-edge touch interference was resolved during runtime testing by extending the existing right-edge gesture deferral to include the bottom edge.
 
-Both modifications are suitable candidates for integration into the existing permanent iPad patch architecture.
+The proposed permanent implementation consists of two changes:
 
-**Phase 13 status: Runtime solution validated. Permanent implementation pending.**
+1. Extend the existing layout helper to modify the height fields of the four explicitly whitelisted geometry records.
+2. Update the existing gesture helper to return the combined bottom-edge and right-edge mask (`0x0C`).
+
+The combined runtime correction produced acceptable results in the observed menus.
+
+Geometry index 35 remains unidentified and has not been independently validated in its intended interface. Its inclusion is intentional, and this limitation remains documented for future investigation.
+
+**Phase 13 status: Expanded runtime solution validated in observed menus. Permanent implementation pending.**
 
 The Loading text clipping issue remains outside the scope of Phase 13 and will be investigated in Phase 14.
